@@ -6,6 +6,8 @@ A self-hosted torrent manager with a Go download engine and a responsive dashboa
 
 ## Features
 
+- Single-owner local account with login/logout and SQLite-backed sessions
+- Local single-owner account with password changes
 - Add magnet links or upload `.torrent` files
 - Live progress, peer count, and download/upload speeds
 - Pause and resume active transfers
@@ -55,7 +57,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-Open `http://YOUR_VPS_IP:3000`. The app listens on port `8080` inside the container, mapped to port `3000` on the VPS. The repository's GitHub Actions workflow publishes images to GHCR on pushes to `main` and version tags. If the package is private, authenticate with `docker login ghcr.io` before pulling.
+Open `http://YOUR_VPS_IP:3000`. The app listens directly on host port `3000` in Docker Compose. The repository's GitHub Actions workflow publishes images to GHCR on pushes to `main` and version tags. If the package is private, authenticate with `docker login ghcr.io` before pulling.
 
 Compose bind-mounts `./data` from the repository directory to `/data` in the container, so all runtime data survives container replacement:
 
@@ -83,6 +85,16 @@ Use the **Settings** link or open `http://localhost:3000/settings.html` to confi
 - Docker download directory: `/data/downloads`
 - Runtime state is stored separately from downloaded content
 - Removing a torrent removes its downloaded files and prunes empty folders under the download directory
+
+## Login and Security
+
+On first launch, create the single local account with a username and password of at least 12 characters. Registration closes once the account is created. Passwords are stored as bcrypt hashes; sessions are stored in `accounts.sqlite` under the state directory and expire after 30 days. There is no setup token or password-recovery flow, so restrict access until the first account exists and keep the password safe.
+
+Use the **Profile** page to update your username or change your password. Password changes require the current password.
+
+If the username is forgotten, run `docker compose exec cloud-torrent ctd username`. To replace a forgotten password, run `docker compose exec -it cloud-torrent ctd password`; enter the new password twice at the hidden prompts. The existing password cannot be displayed because only its bcrypt hash is stored. Password reset signs out all active sessions. For local runs, use `go run . username` or `go run . password`.
+
+For a VPS, put the app behind HTTPS before entering account credentials over the internet. Restrict access to the app's port until the first account has been created.
 
 ## API
 

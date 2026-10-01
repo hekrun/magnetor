@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6f2">
+  <title>Sign in / Cloud Torrent</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell login-page">
+    <header class="topbar">
+      <a class="brand" href="/login.html" aria-label="Cloud Torrent"><span class="brand-mark">CT</span><span>cloud torrent</span></a>
+      <span class="provider-note">LOCAL ACCOUNT</span>
+    </header>
+    <section class="login-layout">
+      <div class="login-intro">
+        <p class="eyebrow">PRIVATE LIBRARY</p>
+        <h1>Your transfers,<br><em>your account.</em></h1>
+        <p class="lede">Sign in to access your torrent library and download controls.</p>
+      </div>
+      <form id="auth-form" class="login-card">
+        <p class="eyebrow" id="auth-eyebrow">ACCOUNT</p>
+        <h2 id="auth-title">Sign in</h2>
+        <p id="auth-description" class="login-description">Use your local Cloud Torrent account.</p>
+        <label class="login-field">Username<input id="username" name="username" autocomplete="username" minlength="3" maxlength="64" required></label>
+        <label class="login-field">Password<input id="password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="72" required></label>
+        <small id="password-hint" class="password-hint" hidden>Choose at least 12 characters. This account is stored only on this server.</small>
+        <button id="auth-submit" class="primary-button login-submit" type="submit">Sign in <span>-></span></button>
+        <p id="auth-message" class="form-message" role="status"></p>
+      </form>
+    </section>
+    <footer><span>Cloud Torrent / local authentication</span><span>Passwords are stored as hashes.</span></footer>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

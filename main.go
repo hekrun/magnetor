@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -26,6 +27,7 @@ import (
 
 type app struct {
 	client  *torrent.Client
+	auth    *authStore
 	root    string
 	config  settings
 	mu      sync.RWMutex
@@ -87,6 +89,14 @@ type searchResult struct {
 }
 
 func main() {
+	if len(os.Args) > 1 || path.Base(os.Args[0]) == "ctd" {
+		if err := runAdminCommand(os.Args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	config := loadSettings()
 	root := os.Getenv("DOWNLOAD_DIR")
 	if root == "" {
@@ -99,6 +109,11 @@ func main() {
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		log.Fatal(err)
 	}
+	auth, err := openAuthStore(filepath.Join(stateDir, "accounts.sqlite"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer auth.close()
 	engineDir := filepath.Join(stateDir, ".cloud-torrent-data")
 	if err := os.MkdirAll(engineDir, 0o755); err != nil {
 		log.Fatal(err)
@@ -121,7 +136,7 @@ func main() {
 	}
 	defer client.Close()
 
-	a := &app{client: client, root: root, config: config, paused: make(map[string]bool), samples: make(map[string]speedSample), records: loadTorrentRecords()}
+	a := &app{client: client, auth: auth, root: root, config: config, paused: make(map[string]bool), samples: make(map[string]speedSample), records: loadTorrentRecords()}
 	a.restoreTorrents()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/torrents", a.handleTorrents)
@@ -135,8 +150,14 @@ func main() {
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, map[string]bool{"ok": true}) })
 	mux.HandleFunc("/api/settings", a.handleSettings)
 	mux.HandleFunc("/api/storage", a.handleStorage)
+	mux.HandleFunc("/api/auth/status", a.handleAuthStatus)
+	mux.HandleFunc("/api/auth/register", a.handleAuthRegister)
+	mux.HandleFunc("/api/auth/login", a.handleAuthLogin)
+	mux.HandleFunc("/api/auth/logout", a.handleAuthLogout)
+	mux.HandleFunc("/api/profile", a.handleProfile)
+	mux.HandleFunc("/api/auth/password", a.handlePasswordChange)
 	mux.Handle("/", http.FileServer(http.Dir("./web")))
-	server := &http.Server{Addr: ":8080", Handler: logging(mux), ReadHeaderTimeout: 10 * time.Second}
+	server := &http.Server{Addr: ":8080", Handler: logging(a.requireLogin(mux)), ReadHeaderTimeout: 10 * time.Second}
 	log.Printf("cloud torrent listening on http://localhost%s", server.Addr)
 	log.Fatal(server.ListenAndServe())
 }

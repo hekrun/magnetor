@@ -5,3 +5,7 @@ downloads_new/
 .torrent-metadata/
 torrents.json
 cloud-torrent.json
+accounts.sqlite*
+.env
+.env.*
+!.env.example

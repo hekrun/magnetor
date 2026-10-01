@@ -18,7 +18,8 @@ COPY --from=build /out/cloud-torrent /app/cloud-torrent
 COPY web /app/web
 COPY README.md /app/README.md
 RUN mkdir -p /data/downloads /data/state \
-    && chown -R app:app /app /data
+    && chown -R app:app /app /data \
+    && ln -s /app/cloud-torrent /usr/local/bin/ctd
 
 USER app
 ENV DOWNLOAD_DIR=/data/downloads

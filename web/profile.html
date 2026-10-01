@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6f2">
+  <title>Profile / Cloud Torrent</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell settings-page">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Cloud Torrent home"><span class="brand-mark">CT</span><span>cloud torrent</span></a>
+      <div class="topbar-right"><span class="auth-user" id="auth-user"></span><a class="settings-link active" href="/profile.html">Profile</a><a class="settings-link" href="/settings.html">Settings</a><button class="logout-button" id="logout" type="button">Log out</button></div>
+    </header>
+    <section class="settings-hero">
+      <p class="eyebrow">YOUR ACCOUNT</p>
+      <h1>Manage your<br><em>profile.</em></h1>
+      <p class="lede">Update your sign-in name or password.</p>
+    </section>
+    <section class="settings-card">
+      <div class="section-heading"><div><p class="eyebrow">PROFILE</p><h2>Account details</h2></div></div>
+      <form id="profile-form">
+        <label class="settings-field">Username<input id="profile-username" minlength="3" maxlength="64" required></label>
+        <label class="settings-field profile-spaced">Current password<input id="profile-current-password" type="password" autocomplete="current-password" required></label>
+        <div class="settings-actions"><button class="primary-button" type="submit">Save profile <span>-></span></button></div>
+        <p id="profile-message" class="form-message" role="status"></p>
+      </form>
+    </section>
+    <section class="settings-card">
+      <div class="section-heading"><div><p class="eyebrow">SECURITY</p><h2>Change password</h2></div></div>
+      <form id="password-form">
+        <label class="settings-field">Current password<input id="password-current" type="password" autocomplete="current-password" required></label>
+        <label class="settings-field profile-spaced">New password<input id="password-new" type="password" autocomplete="new-password" minlength="12" maxlength="72" required><small>Use at least 12 characters. You’ll be signed out after changing it.</small></label>
+        <div class="settings-actions"><button class="primary-button" type="submit">Change password <span>-></span></button></div>
+        <p id="password-message" class="form-message" role="status"></p>
+      </form>
+    </section>
+    <footer><span>Cloud Torrent / account profile</span><span><a href="/settings.html">Engine settings</a></span></footer>
+  </main>
+  <script src="/auth.js"></script>
+  <script src="/profile.js"></script>
+</body>
+</html>

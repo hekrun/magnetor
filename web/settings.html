@@ -11,7 +11,7 @@
   <main class="shell settings-page">
     <header class="topbar">
       <a class="brand" href="/" aria-label="Cloud Torrent home"><span class="brand-mark">CT</span><span>cloud torrent</span></a>
-      <div class="topbar-right"><span class="status-dot"></span><span>Engine online</span><a class="settings-link active" href="/settings.html">Settings</a></div>
+      <div class="topbar-right"><span class="status-dot"></span><span>Engine online</span><span class="auth-user" id="auth-user"></span><a class="settings-link" href="/profile.html">Profile</a><a class="settings-link active" href="/settings.html">Settings</a><button class="logout-button" id="logout" type="button">Log out</button></div>
     </header>
     <section class="settings-hero">
       <p class="eyebrow">ENGINE CONTROL</p>
@@ -36,6 +36,7 @@
       </section>
     <footer><span>Cloud Torrent / engine settings</span><span>Changes apply after restart.</span></footer>
   </main>
+  <script src="/auth.js"></script>
   <script src="/settings.js"></script>
 </body>
 </html>

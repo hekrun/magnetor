@@ -11,7 +11,7 @@
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="/" aria-label="Cloud Torrent home"><span class="brand-mark">CT</span><span>cloud torrent</span></a>
-      <div class="topbar-right"><span class="status-dot"></span><span>Engine online</span><a class="settings-link" href="/settings.html">Settings</a><button class="icon-button" id="refresh" title="Refresh library" aria-label="Refresh library">↻</button></div>
+      <div class="topbar-right"><span class="status-dot"></span><span>Engine online</span><span class="auth-user" id="auth-user"></span><a class="settings-link" href="/profile.html">Profile</a><a class="settings-link" href="/settings.html">Settings</a><button class="logout-button" id="logout" type="button">Log out</button><button class="icon-button" id="refresh" title="Refresh library" aria-label="Refresh library">↻</button></div>
     </header>
 
     <section class="hero">
@@ -59,6 +59,7 @@
 
     <footer><span>Cloud Torrent / local engine</span><span id="footer-disk">Storage: checking...</span><span>Download responsibly.</span></footer>
   </main>
+  <script src="/auth.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
