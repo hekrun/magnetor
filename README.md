@@ -1,6 +1,6 @@
 # Cloud Torrent
 
-A self-hosted torrent manager with a Go download engine and a responsive web dashboard. Add magnets or `.torrent` files, monitor transfers, and manage completed downloads from your browser.
+A self-hosted torrent manager with a Go download engine and a responsive dashboard. Add magnets or `.torrent` files, monitor transfers, and manage completed files from your browser.
 
 > Use this software only to download and share content you are authorized to access. Follow applicable laws and provider terms.
 
@@ -55,9 +55,9 @@ docker compose up -d
 docker compose logs -f
 ```
 
-Open `http://YOUR_VPS_IP:8080`. If the GHCR package is private, authenticate on the VPS with `docker login ghcr.io` first. The repository's GitHub Actions workflow publishes images on pushes to `main` and version tags.
+Open `http://YOUR_VPS_IP:3000`. The app listens on port `8080` inside the container, mapped to port `3000` on the VPS. The repository's GitHub Actions workflow publishes images to GHCR on pushes to `main` and version tags. If the package is private, authenticate with `docker login ghcr.io` before pulling.
 
-Compose keeps persistent data in the `cloud-torrent-data` volume:
+Compose bind-mounts `./data` from the repository directory to `/data` in the container, so all runtime data survives container replacement:
 
 - `/data/downloads`: downloaded content
 - `/data/state`: settings, torrent registry, uploaded metadata, and engine state
@@ -71,11 +71,14 @@ docker compose logs -f               # Follow logs
 docker compose down                  # Stop the service; keep the data volume
 ```
 
-Do not run `docker compose down -v` unless you intend to delete the persistent volume and its contents.
+To use another host directory, edit the left side of the `/data` volume mapping in `docker-compose.yml`. `docker compose down` does not delete the host data directory.
 
 ## Settings and Storage
 
-- Settings page: `http://localhost:8080/settings.html`
+Use the **Settings** link or open `http://localhost:3000/settings.html` to configure the server download path, peer uploads, and completed-torrent seeding. Engine settings apply after restarting the server.
+
+- Local settings page: `http://localhost:8080/settings.html`
+- VPS settings page: `http://YOUR_VPS_IP:3000/settings.html`
 - Default local download directory: `./downloads`
 - Docker download directory: `/data/downloads`
 - Runtime state is stored separately from downloaded content
@@ -91,6 +94,8 @@ Do not run `docker compose down -v` unless you intend to delete the persistent v
 - `GET /api/search?q=QUERY&provider=archive`: search a provider
 - `GET /api/settings` and `PUT /api/settings`: read or save settings
 - `GET /api/storage`: report disk capacity for the active download directory
+
+Runtime settings, torrent registry, uploaded metadata, and engine databases are stored under `/data/state` in Docker. Downloads are stored under `/data/downloads`.
 
 ## Development Checks
 
