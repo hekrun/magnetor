@@ -42,6 +42,21 @@
       <div id="search-results" class="search-results"></div>
     </section>
 
+    <dialog id="media-player" class="media-player" aria-label="Video player">
+      <header class="player-heading">
+        <div class="player-heading-copy"><span class="player-kicker">NOW PLAYING</span><strong id="media-title">Video</strong></div>
+        <form class="player-close-form" method="dialog"><button id="close-player" class="player-close" type="submit" aria-label="Close player" title="Close player">×</button></form>
+      </header>
+      <div class="player-stage">
+        <video id="media-video" controls playsinline></video>
+        <div id="media-error" class="player-error" hidden>
+          <strong>This video format isn’t supported by your browser.</strong>
+          <span>Download the file and open it with a desktop media player.</span>
+          <a id="media-download" class="download-button" href download>Download video</a>
+        </div>
+      </div>
+    </dialog>
+
     <footer><span>Cloud Torrent / local engine</span><span id="footer-disk">Storage: checking...</span><span>Download responsibly.</span></footer>
   </main>
   <script src="/app.js"></script>

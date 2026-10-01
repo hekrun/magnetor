@@ -13,6 +13,19 @@ function formatSearchSize(value) {
   return Number.isFinite(numeric) && numeric > 0 ? formatBytes(numeric) : (value || 'Size unknown');
 }
 
+function isVideoFile(path) {
+  return /\.(mp4|m4v|mkv|avi|webm|flv|f4v|wmv|mov|mpeg|mpg|3gp|ogv)$/i.test(path);
+}
+
+function renderTorrentFiles(torrent) {
+  const files = torrent.files || [];
+  const zipLink = files.length > 1 && files.every((file) => file.complete)
+    ? `<a class="zip-download" href="/download-zip/${encodeURIComponent(torrent.hash)}">Download all as ZIP</a>`
+    : '';
+  const fileRows = files.map((file) => `<div class="file-item"><span>${escapeHTML(file.path)}</span><small>${formatBytes(file.size)}</small>${file.complete ? `${isVideoFile(file.path) ? `<button class="media-button" data-play="/stream/${torrent.hash}/${encodeURIComponent(file.path)}" data-title="${escapeAttribute(file.path)}">Play</button><a class="media-button" href="/stream/${torrent.hash}/${encodeURIComponent(file.path)}" target="_blank" rel="noreferrer">Open</a>` : ''}<a class="download-button" href="/download/${torrent.hash}/${encodeURIComponent(file.path)}">Download</a>` : '<small class="file-pending">Downloading</small>'}</div>`).join('');
+  return `${zipLink}${fileRows}`;
+}
+
 function loadFooterStorage() {
   fetch('/api/storage').then((response) => response.json()).then((storage) => {
     $('#footer-disk').textContent = storage.free ? `${formatBytes(storage.free)} free` : 'Storage unavailable';
@@ -21,6 +34,7 @@ function loadFooterStorage() {
 
 function renderTorrents() {
   const list = $('#torrent-list');
+  const openFileLists = new Set([...list.querySelectorAll('.file-details[open]')].map((details) => details.dataset.hash));
   const visible = state.torrents.filter((torrent) => state.filter === 'all' || (state.filter === 'complete' ? torrent.progress >= 100 : torrent.progress < 100));
   $('#library-count').textContent = state.torrents.length;
   if (!visible.length) {
@@ -29,7 +43,7 @@ function renderTorrents() {
   }
   list.innerHTML = visible.map((torrent) => `<article class="torrent-row">
     <div class="file-badge">${torrent.progress >= 100 ? 'OK' : 'DL'}</div>
-    <div class="torrent-main"><div class="torrent-title">${escapeHTML(torrent.name)}</div><div class="torrent-meta">${formatBytes(torrent.downloaded)} of ${formatBytes(torrent.size)} <span class="meta-separator">/</span> ${torrent.peers} peers <span class="meta-separator">/</span> ↓ ${formatBytes(torrent.downloadSpeed || 0)}/s <span class="meta-separator">/</span> ↑ ${formatBytes(torrent.uploadSpeed || 0)}/s</div><div class="progress-track"><span style="width:${Math.min(torrent.progress, 100)}%"></span></div><details class="file-details"><summary>View files (${(torrent.files || []).length})</summary><div class="file-list">${(torrent.files || []).map((file) => `<div class="file-item"><span>${escapeHTML(file.path)}</span><small>${formatBytes(file.size)}</small>${file.complete ? `<a class="download-button" href="/download/${torrent.hash}/${encodeURIComponent(file.path)}">Download</a>` : '<small class="file-pending">Downloading</small>'}</div>`).join('')}</div></details></div>
+    <div class="torrent-main"><div class="torrent-title">${escapeHTML(torrent.name)}</div><div class="torrent-meta">${formatBytes(torrent.downloaded)} of ${formatBytes(torrent.size)} <span class="meta-separator">/</span> ${torrent.peers} peers <span class="meta-separator">/</span> ↓ ${formatBytes(torrent.downloadSpeed || 0)}/s <span class="meta-separator">/</span> ↑ ${formatBytes(torrent.uploadSpeed || 0)}/s</div><div class="progress-track"><span style="width:${Math.min(torrent.progress, 100)}%"></span></div><details class="file-details" data-hash="${torrent.hash}" ${openFileLists.has(torrent.hash) ? 'open' : ''}><summary>View files (${(torrent.files || []).length})</summary><div class="file-list">${renderTorrentFiles(torrent)}</div></details></div>
     <div class="torrent-stat"><strong>${Math.round(torrent.progress)}%</strong><small>${torrent.status}</small></div>
     <div class="torrent-controls">${torrent.progress < 100 ? `<button class="control-button" data-action="${torrent.status === 'Paused' ? 'start' : 'stop'}" data-hash="${torrent.hash}">${torrent.status === 'Paused' ? 'Resume' : 'Pause'}</button>` : `<span class="seed-state">${torrent.status === 'Seeding' ? 'Seeding' : 'Complete'}</span>`}<button class="row-action" data-delete="${torrent.hash}" title="Remove torrent and files" aria-label="Remove torrent and files">×</button></div>
   </article>`).join('');
@@ -86,6 +100,25 @@ $('#torrent-file').addEventListener('change', async (event) => {
 $('#refresh').addEventListener('click', () => loadTorrents().catch(() => {}));
 document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => { document.querySelector('.tab.active').classList.remove('active'); tab.classList.add('active'); state.filter = tab.dataset.filter; renderTorrents(); }));
 $('#torrent-list').addEventListener('click', async (event) => {
+  const playButton = event.target.closest('[data-play]');
+  const playURL = playButton?.dataset.play;
+  if (playURL) {
+    const player = $('#media-player');
+    const video = $('#media-video');
+    const fallback = $('#media-error');
+    fallback.hidden = true;
+    video.hidden = false;
+    video.onerror = () => {
+      video.hidden = true;
+      fallback.hidden = false;
+    };
+    video.src = playURL;
+    $('#media-title').textContent = playButton.dataset.title || 'Video';
+    $('#media-download').href = playButton.dataset.download || playURL.replace('/stream/', '/download/');
+    player.showModal();
+    video.play().catch(() => {});
+    return;
+  }
   const action = event.target.dataset.action;
   const hash = event.target.dataset.hash;
   if (action && hash) {
@@ -99,8 +132,34 @@ $('#torrent-list').addEventListener('click', async (event) => {
   await fetch(`/api/torrent/${deleteHash}`, { method: 'DELETE' });
   await loadTorrents();
 });
+$('#media-player').addEventListener('close', () => {
+	clearPlayerMedia();
+});
+
+function clearPlayerMedia() {
+  const video = $('#media-video');
+  video.pause();
+  video.onerror = null;
+  video.removeAttribute('src');
+  video.load();
+  $('#media-error').hidden = true;
+  video.hidden = false;
+}
+
+function resetMediaPlayer() {
+  const player = $('#media-player');
+  if (player.open) player.close();
+  else player.removeAttribute('open');
+  clearPlayerMedia();
+}
+
+$('#media-player').addEventListener('click', (event) => {
+  if (event.target === $('#media-player')) $('#media-player').close();
+});
 $('#search-form').addEventListener('submit', async (event) => { event.preventDefault(); const query = $('#query').value.trim(); if (!query) return; $('#search-results').innerHTML = '<p class="search-empty">Searching providers...</p>'; try { const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&provider=${$('#provider').value}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); renderResults(data); } catch (error) { $('#search-results').innerHTML = `<p class="search-empty">${escapeHTML(error.message)}</p>`; } });
 $('#search-results').addEventListener('click', async (event) => { const magnet = event.target.dataset.magnet; if (!magnet) return; event.target.textContent = 'Adding...'; try { await addMagnet(magnet); event.target.textContent = 'Added'; } catch (error) { event.target.textContent = 'Retry'; } });
 loadTorrents().catch(() => { $('#last-updated').textContent = 'Engine unavailable'; });
 loadFooterStorage();
+resetMediaPlayer();
+window.addEventListener('pageshow', resetMediaPlayer);
 setInterval(() => loadTorrents().catch(() => {}), 4000);

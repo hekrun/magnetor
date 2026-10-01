@@ -13,7 +13,6 @@ import (
 	"strings"
 )
 
-var tagPattern = regexp.MustCompile(`(?s)<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>`)
 var nyaaRowPattern = regexp.MustCompile(`(?s)<tr[^>]*>(.*?)</tr>`)
 var nyaaLinkPattern = regexp.MustCompile(`<a[^>]+href="(/view/[^"]+)"[^>]*>(.*?)</a>`)
 var magnetPattern = regexp.MustCompile(`href="(magnet:\?[^\"]+)"`)

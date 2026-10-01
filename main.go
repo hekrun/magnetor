@@ -1,15 +1,19 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -125,6 +129,8 @@ func main() {
 	mux.HandleFunc("/api/torrent/", a.handleTorrentRoute)
 	mux.HandleFunc("/api/torrent-file", a.handleTorrentFile)
 	mux.HandleFunc("/download/", a.handleDownload)
+	mux.HandleFunc("/download-zip/", a.handleDownloadZip)
+	mux.HandleFunc("/stream/", a.handleStream)
 	mux.HandleFunc("/api/search", a.handleSearch)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, map[string]bool{"ok": true}) })
 	mux.HandleFunc("/api/settings", a.handleSettings)
@@ -411,7 +417,108 @@ func (a *app) handleTorrentFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleDownload(w http.ResponseWriter, r *http.Request) {
-	parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/download/"), "/", 2)
+	a.serveTorrentFile(w, r, "/download/", "attachment")
+}
+
+func (a *app) handleStream(w http.ResponseWriter, r *http.Request) {
+	a.serveTorrentFile(w, r, "/stream/", "inline")
+}
+
+func (a *app) handleDownloadZip(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	hash := strings.TrimPrefix(r.URL.Path, "/download-zip/")
+	t, ok := a.find(hash)
+	if !ok || t.Info() == nil {
+		writeError(w, http.StatusNotFound, "torrent or metadata not found")
+		return
+	}
+	files := t.Files()
+	if len(files) < 2 {
+		writeError(w, http.StatusBadRequest, "ZIP download requires a torrent with multiple files")
+		return
+	}
+
+	type archiveFile struct {
+		name string
+		path string
+		info os.FileInfo
+	}
+	root, err := filepath.Abs(a.root)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid download directory")
+		return
+	}
+	archiveFiles := make([]archiveFile, 0, len(files))
+	for _, file := range files {
+		if file.BytesCompleted() < file.Length() {
+			writeError(w, http.StatusConflict, "all torrent files must be complete before creating a ZIP")
+			return
+		}
+		name := path.Clean(strings.ReplaceAll(file.Path(), "\\", "/"))
+		if name == "." || name == ".." || strings.HasPrefix(name, "../") || strings.HasPrefix(name, "/") {
+			writeError(w, http.StatusForbidden, "torrent contains an invalid file path")
+			return
+		}
+		filePath, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid file path")
+			return
+		}
+		relative, err := filepath.Rel(root, filePath)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+			writeError(w, http.StatusForbidden, "file path is outside download directory")
+			return
+		}
+		info, err := os.Stat(filePath)
+		if err != nil || !info.Mode().IsRegular() {
+			writeError(w, http.StatusConflict, "a completed torrent file is not available on disk")
+			return
+		}
+		archiveFiles = append(archiveFiles, archiveFile{name: name, path: filePath, info: info})
+	}
+
+	archiveName := path.Base(strings.ReplaceAll(t.Name(), "\\", "/"))
+	if archiveName == "" || archiveName == "." || archiveName == "/" {
+		archiveName = "torrent-files"
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": archiveName + ".zip"}))
+	zipWriter := zip.NewWriter(w)
+	for _, file := range archiveFiles {
+		header, err := zip.FileInfoHeader(file.info)
+		if err != nil {
+			log.Printf("could not create ZIP header for %s: %v", file.name, err)
+			break
+		}
+		header.Name = file.name
+		header.Method = zip.Deflate
+		entry, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			log.Printf("could not create ZIP entry for %s: %v", file.name, err)
+			break
+		}
+		input, err := os.Open(file.path)
+		if err != nil {
+			log.Printf("could not open file for ZIP %s: %v", file.path, err)
+			break
+		}
+		_, copyErr := io.Copy(entry, input)
+		closeErr := input.Close()
+		if copyErr != nil || closeErr != nil {
+			log.Printf("could not write ZIP entry %s: %v", file.name, errors.Join(copyErr, closeErr))
+			break
+		}
+	}
+	if err := zipWriter.Close(); err != nil {
+		log.Printf("could not finish torrent ZIP: %v", err)
+	}
+}
+
+func (a *app) serveTorrentFile(w http.ResponseWriter, r *http.Request, route, disposition string) {
+	parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, route), "/", 2)
 	if len(parts) != 2 {
 		writeError(w, http.StatusBadRequest, "file path is required")
 		return
@@ -446,7 +553,27 @@ func (a *app) handleDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "file path is outside download directory")
 		return
 	}
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(path)+"\"")
+	filename := filepath.Base(path)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
+	if disposition == "inline" {
+		contentType := mime.TypeByExtension(filepath.Ext(filename))
+		switch strings.ToLower(filepath.Ext(filename)) {
+		case ".mkv":
+			contentType = "video/x-matroska"
+		case ".flv":
+			contentType = "video/x-flv"
+		case ".f4v":
+			contentType = "video/mp4"
+		case ".m4v":
+			contentType = "video/mp4"
+		case ".wmv":
+			contentType = "video/x-ms-wmv"
+		}
+		if contentType != "" {
+			w.Header().Set("Content-Type", contentType)
+		}
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+	}
 	http.ServeFile(w, r, path)
 }
 
@@ -513,20 +640,57 @@ func (a *app) removeTorrent(t *torrent.Torrent) {
 	if record.MetaFile != "" {
 		_ = os.Remove(record.MetaFile)
 	}
-	root, err := filepath.Abs(a.root)
+	removeTorrentFiles(a.root, paths)
+}
+
+func removeTorrentFiles(root string, relativePaths []string) {
+	root, err := filepath.Abs(root)
 	if err != nil {
 		return
 	}
-	for _, relative := range paths {
-		path, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(relative)))
+	rootReal, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return
+	}
+	emptyDirs := make(map[string]struct{})
+	for _, relative := range relativePaths {
+		cleaned := filepath.Clean(filepath.FromSlash(relative))
+		if filepath.IsAbs(cleaned) || cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		target := filepath.Join(root, cleaned)
+		relativeTarget, err := filepath.Rel(root, target)
+		if err != nil || relativeTarget == ".." || strings.HasPrefix(relativeTarget, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		parentReal, err := filepath.EvalSymlinks(filepath.Dir(target))
 		if err != nil {
 			continue
 		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		relativeParent, err := filepath.Rel(rootReal, parentReal)
+		if err != nil || relativeParent == ".." || strings.HasPrefix(relativeParent, ".."+string(os.PathSeparator)) {
 			continue
 		}
-		_ = os.RemoveAll(path)
+		if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+			continue
+		}
+		for dir := filepath.Dir(target); dir != root; dir = filepath.Dir(dir) {
+			relativeDir, err := filepath.Rel(root, dir)
+			if err != nil || relativeDir == "." || relativeDir == ".." || strings.HasPrefix(relativeDir, ".."+string(os.PathSeparator)) {
+				break
+			}
+			emptyDirs[dir] = struct{}{}
+		}
+	}
+	dirs := make([]string, 0, len(emptyDirs))
+	for dir := range emptyDirs {
+		dirs = append(dirs, dir)
+	}
+	sort.Slice(dirs, func(i, j int) bool {
+		return strings.Count(dirs[i], string(os.PathSeparator)) > strings.Count(dirs[j], string(os.PathSeparator))
+	})
+	for _, dir := range dirs {
+		_ = os.Remove(dir)
 	}
 }
 
