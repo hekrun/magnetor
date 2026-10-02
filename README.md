@@ -1,6 +1,6 @@
 # Magnetor
 
-Magnetor is a self-hosted torrent client and web dashboard built with Go. Add magnet links or `.torrent` files, monitor torrent downloads, and manage completed files from your browser. Run it locally or deploy it with Docker for a private, persistent torrent library.
+Magnetor is a self-hosted cloud torrent client with a Go-powered web dashboard. Add magnet links or `.torrent` files, monitor transfers, and manage completed downloads from any browser. Run it locally or deploy it with Docker for a private, persistent torrent library.
 
 > Use this software only to download and share content you are authorized to access. Follow applicable laws and provider terms.
 
