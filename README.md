@@ -169,7 +169,7 @@ docker compose logs -f       # Follow logs
 docker compose down          # Stop and remove the container; ./data is kept
 ```
 
-The `latest` image is published from `main`. Images for the `beta` branch and version tags (for example `v1.1`) use the matching tag, e.g. `ghcr.io/hekrun/magnetor:beta`. If the package is private, run `docker login ghcr.io` first.
+The publish workflow builds `latest` on pushes to `main` and version tags (for example `v1.1.0`) on matching tag pushes. Pushes to `beta` do not trigger a build; to publish that branch, manually run the workflow with `beta` selected. Branch and version-tag images use their matching tags, for example `ghcr.io/hekrun/magnetor:beta`. If the package is private, run `docker login ghcr.io` first.
 
 ## Install on a cloud VPS
 
@@ -247,14 +247,13 @@ In Docker keep the download path inside `/data/downloads` so files stay in the m
 - `GET /api/settings` and `PUT /api/settings`: read or save settings
 - `GET /api/storage`: report disk capacity for the active download directory
 
-All endpoints except health and login/register require a signed-in session.
+All endpoints except health, auth status, login, registration, and logout require a signed-in session.
 
 ## Development checks
 
 ```bash
 go test ./...
 go vet ./...
-node --check web/js/app.js
-node --check web/js/settings.js
+for file in web/js/*.js; do node --check "$file"; done
 docker compose config
 ```
