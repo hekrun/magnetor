@@ -1,0 +1,105 @@
+/* ============================================================
+   Theme tokens — Light (default) + Dark
+   Switch at runtime via <html data-theme="light|dark">
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --bg: #f4f6fb;
+  --bg-soft: #eef1f8;
+  --surface: #ffffff;
+  --surface-hover: #f4f6fb;
+  --surface-sunken: #f0f2f8;
+  --border: #e3e7f0;
+  --border-strong: #cfd5e4;
+
+  /* text */
+  --text: #161a22;
+  --text-muted: #6a7282;
+  --text-faint: #99a0b2;
+
+  /* brand / accent */
+  --accent: #3f6bf0;
+  --accent-strong: #2a4fd1;
+  --accent-soft: rgba(63, 107, 240, .1);
+  --accent-ink: #ffffff;
+  --success: #1aa260;
+  --success-soft: rgba(26, 162, 96, .12);
+  --danger: #e2493c;
+  --danger-soft: rgba(226, 73, 60, .1);
+  --warn: #e2a63c;
+
+  /* elevation */
+  --shadow-sm: 0 1px 2px rgba(23, 28, 43, .06), 0 1px 1px rgba(23, 28, 43, .04);
+  --shadow-md: 0 10px 30px rgba(23, 28, 43, .08), 0 2px 8px rgba(23, 28, 43, .04);
+  --shadow-lg: 0 24px 60px rgba(23, 28, 43, .14);
+
+  /* shape */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  --font-sans: 'Manrope', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f1218;
+  --bg-soft: #141822;
+  --surface: #171c26;
+  --surface-hover: #1d2330;
+  --surface-sunken: #11151d;
+  --border: #262d3c;
+  --border-strong: #333c50;
+
+  --text: #e9ecf5;
+  --text-muted: #9aa2b8;
+  --text-faint: #6c7489;
+
+  --accent: #6d8dff;
+  --accent-strong: #8fa6ff;
+  --accent-soft: rgba(109, 141, 255, .16);
+  --accent-ink: #0f1218;
+  --success: #3ddc91;
+  --success-soft: rgba(61, 220, 145, .14);
+  --danger: #ff6b61;
+  --danger-soft: rgba(255, 107, 97, .14);
+  --warn: #f0c35e;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-md: 0 16px 40px rgba(0, 0, 0, .45);
+  --shadow-lg: 0 28px 70px rgba(0, 0, 0, .55);
+}
+
+/* Respect system preference until the user picks explicitly (see js/theme.js,
+   which sets the attribute before first paint to avoid any flash). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #0f1218;
+    --bg-soft: #141822;
+    --surface: #171c26;
+    --surface-hover: #1d2330;
+    --surface-sunken: #11151d;
+    --border: #262d3c;
+    --border-strong: #333c50;
+    --text: #e9ecf5;
+    --text-muted: #9aa2b8;
+    --text-faint: #6c7489;
+    --accent: #6d8dff;
+    --accent-strong: #8fa6ff;
+    --accent-soft: rgba(109, 141, 255, .16);
+    --accent-ink: #0f1218;
+    --success: #3ddc91;
+    --success-soft: rgba(61, 220, 145, .14);
+    --danger: #ff6b61;
+    --danger-soft: rgba(255, 107, 97, .14);
+    --warn: #f0c35e;
+  }
+}

@@ -12,3 +12,4 @@ accounts.sqlite*
 torrents.json
 *.iso
 *.part
+data/

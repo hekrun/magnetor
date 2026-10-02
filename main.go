@@ -156,10 +156,32 @@ func main() {
 	mux.HandleFunc("/api/auth/logout", a.handleAuthLogout)
 	mux.HandleFunc("/api/profile", a.handleProfile)
 	mux.HandleFunc("/api/auth/password", a.handlePasswordChange)
-	mux.Handle("/", http.FileServer(http.Dir("./web")))
+	registerWebPages(mux)
 	server := &http.Server{Addr: ":8080", Handler: logging(a.requireLogin(mux)), ReadHeaderTimeout: 10 * time.Second}
-	log.Printf("cloud torrent listening on http://localhost%s", server.Addr)
+	log.Printf("Magnetor listening on http://localhost%s", server.Addr)
 	log.Fatal(server.ListenAndServe())
+}
+
+// registerWebPages wires up the HTML pages (kept under web/html for a tidy,
+// folder-wise layout) while leaving their public URLs unchanged, and falls
+// back to a plain file server for static assets (web/css, web/js, etc).
+func registerWebPages(mux *http.ServeMux) {
+	servePage := func(name string) http.HandlerFunc {
+		file := filepath.Join("web", "html", name)
+		return func(w http.ResponseWriter, r *http.Request) { http.ServeFile(w, r, file) }
+	}
+	mux.HandleFunc("/login.html", servePage("login.html"))
+	mux.HandleFunc("/profile.html", servePage("profile.html"))
+	mux.HandleFunc("/settings.html", servePage("settings.html"))
+	index := servePage("index.html")
+	assets := http.FileServer(http.Dir("./web"))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			index(w, r)
+			return
+		}
+		assets.ServeHTTP(w, r)
+	})
 }
 
 func moveLegacyEngineFiles(downloadPath, enginePath string) {
@@ -179,7 +201,7 @@ func moveLegacyEngineFiles(downloadPath, enginePath string) {
 }
 
 func loadSettings() settings {
-	config := settings{DownloadPath: "./downloads", Seeding: false, Upload: false}
+	config := settings{DownloadPath: "./data/downloads", Seeding: false, Upload: false}
 	data, err := os.ReadFile(filepath.Join(stateDirectory(), "cloud-torrent.json"))
 	if err == nil {
 		_ = json.Unmarshal(data, &config)
@@ -191,7 +213,7 @@ func stateDirectory() string {
 	if value := os.Getenv("STATE_DIR"); value != "" {
 		return value
 	}
-	return "."
+	return "./data/state"
 }
 
 func loadTorrentRecords() map[string]torrentRecord {

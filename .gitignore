@@ -9,3 +9,6 @@ accounts.sqlite*
 .env
 .env.*
 !.env.example
+
+# Local runtime data (downloads, accounts, torrent state)
+data/

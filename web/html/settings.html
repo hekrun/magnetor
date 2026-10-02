@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6fb">
+  <title>Settings | Magnetor</title>
+  <meta name="description" content="Configure download storage and sharing options in Magnetor, your self-hosted torrent dashboard.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Magnetor">
+  <meta property="og:title" content="Settings | Magnetor">
+  <meta property="og:description" content="Configure download storage and sharing options in your Magnetor torrent dashboard.">
+  <meta name="twitter:card" content="summary">
+  <script>(function(){var s=localStorage.getItem('ctd-theme');var t=(s==='dark'||s==='light')?s:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/loader.css">
+</head>
+<body>
+  <div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-label="Loading Magnetor">
+    <div class="loader-emblem"><span class="loader-ring"></span><span class="loader-mark">M</span></div>
+    <p class="loader-text">Warming up your downloads…</p>
+  </div>
+  <script src="/js/loader.js"></script>
+  <main class="shell settings-page">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Magnetor home"><span class="brand-mark">M</span><span>Magnetor</span></a>
+      <div class="topbar-right"><span class="status-dot"></span><span>Engine online</span><span class="auth-user" id="auth-user"></span><a class="settings-link" href="/profile.html">Profile</a><a class="settings-link active" href="/settings.html">Settings</a><button class="logout-button" id="logout" type="button">Log out</button><button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle aria-pressed="false" title="Switch to dark mode"><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></button></div>
+    </header>
+    <section class="settings-hero">
+      <p class="eyebrow">ENGINE CONTROL</p>
+      <h1>Shape your<br><em>download space.</em></h1>
+      <p class="lede">Choose where files live and decide whether completed torrents can share back with their peers.</p>
+    </section>
+    <section class="settings-card">
+      <div class="section-heading"><div><p class="eyebrow">STORAGE</p><h2>Download location</h2></div><span class="provider-note">Local server path</span></div>
+      <form id="settings-form">
+        <label class="settings-field">Download path<input id="download-path" type="text" placeholder="/path/to/downloads" required><small>Absolute or workspace-relative path on the server.</small></label>
+        <div class="settings-divider"></div>
+        <div class="setting-option"><div><strong>Allow upload to peers</strong><p>Let other peers receive pieces from this engine.</p></div><label class="toggle"><input id="upload-enabled" type="checkbox"><span></span></label></div>
+        <div class="setting-option"><div><strong>Seed completed torrents</strong><p>Keep completed downloads available for sharing.</p></div><label class="toggle"><input id="seeding-enabled" type="checkbox"><span></span></label></div>
+        <div class="settings-actions"><a class="secondary-button" href="/">Back to library</a><button class="primary-button" type="submit">Save settings <span>-></span></button></div>
+        <p id="settings-message" class="form-message" role="status"></p>
+      </form>
+    </section>
+      <section class="storage-card">
+        <div class="section-heading"><div><p class="eyebrow">SERVER STORAGE</p><h2>Disk space</h2></div><span class="provider-note">Download volume</span></div>
+        <div class="disk-meter"><span id="disk-bar"></span></div>
+        <div class="disk-stats"><div><small>Used</small><strong id="disk-used">--</strong></div><div><small>Free</small><strong id="disk-free">--</strong></div><div><small>Total</small><strong id="disk-total">--</strong></div></div>
+      </section>
+    <footer><span>Magnetor / engine settings</span><span>Changes apply after restart.</span></footer>
+  </main>
+  <script src="/js/theme.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/settings.js"></script>
+</body>
+</html>

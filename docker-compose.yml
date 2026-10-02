@@ -1,10 +1,10 @@
 services:
-  cloud-torrent:
-    image: ghcr.io/hekrun/cloud-torrent-downloader:latest
+  magnetor:
+    image: ghcr.io/hekrun/magnetor:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cloud-torrent
+    container_name: magnetor
     restart: unless-stopped
     ports:
       - "3000:8080"
@@ -12,5 +12,5 @@ services:
       DOWNLOAD_DIR: /data/downloads
       STATE_DIR: /data/state
     volumes:
-      # REPLACE the left side with the exact path on your machine where you want files to save
+      # Relative to this file, so data/ is created next to the compose file you run.
       - ./data:/data

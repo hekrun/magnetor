@@ -364,8 +364,8 @@ func (a *app) requireLogin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		public := r.URL.Path == "/api/health" || r.URL.Path == "/api/auth/status" ||
 			r.URL.Path == "/api/auth/register" || r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/logout" ||
-			r.URL.Path == "/login.html" || r.URL.Path == "/login.js" || r.URL.Path == "/auth.js" ||
-			r.URL.Path == "/app.js" || r.URL.Path == "/settings.js" || r.URL.Path == "/profile.js" || r.URL.Path == "/styles.css"
+			r.URL.Path == "/login.html" ||
+			strings.HasPrefix(r.URL.Path, "/css/") || strings.HasPrefix(r.URL.Path, "/js/") || strings.HasPrefix(r.URL.Path, "/images/")
 		if public {
 			next.ServeHTTP(w, r)
 			return

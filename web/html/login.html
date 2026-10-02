@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6fb">
+  <title>Sign In | Magnetor</title>
+  <meta name="description" content="Sign in to Magnetor, your self-hosted torrent dashboard for managing magnet links, torrent transfers, and downloads.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Magnetor">
+  <meta property="og:title" content="Sign In | Magnetor">
+  <meta property="og:description" content="Your self-hosted torrent dashboard for managing magnet links, transfers, and downloads.">
+  <meta name="twitter:card" content="summary">
+  <script>(function(){var s=localStorage.getItem('ctd-theme');var t=(s==='dark'||s==='light')?s:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/loader.css">
+</head>
+<body>
+  <div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-label="Loading Magnetor">
+    <div class="loader-emblem"><span class="loader-ring"></span><span class="loader-mark">M</span></div>
+    <p class="loader-text">Warming up your downloads…</p>
+  </div>
+  <script src="/js/loader.js"></script>
+  <main class="shell login-page">
+    <header class="topbar">
+      <a class="brand" href="/login.html" aria-label="Magnetor"><span class="brand-mark">M</span><span>Magnetor</span></a>
+      <div class="topbar-right"><span class="provider-note">LOCAL ACCOUNT</span><button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle aria-pressed="false" title="Switch to dark mode"><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></button></div>
+    </header>
+    <section class="login-layout">
+      <div class="login-intro">
+        <p class="eyebrow">PRIVATE LIBRARY</p>
+        <h1>Your transfers,<br><em>your account.</em></h1>
+        <p class="lede">Sign in to access your torrent library and download controls.</p>
+      </div>
+      <form id="auth-form" class="login-card">
+        <p class="eyebrow" id="auth-eyebrow">ACCOUNT</p>
+        <h2 id="auth-title">Sign in</h2>
+        <p id="auth-description" class="login-description">Use your local Magnetor account.</p>
+        <label class="login-field">Username<input id="username" name="username" autocomplete="username" minlength="3" maxlength="64" required></label>
+        <label class="login-field">Password<input id="password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="72" required></label>
+        <small id="password-hint" class="password-hint" hidden>Choose at least 12 characters. This account is stored only on this server.</small>
+        <button id="auth-submit" class="primary-button login-submit" type="submit">Sign in <span>-></span></button>
+        <p id="auth-message" class="form-message" role="status"></p>
+      </form>
+    </section>
+    <footer><span>Magnetor / local authentication</span><span>Passwords are stored as hashes.</span></footer>
+  </main>
+  <script src="/js/theme.js"></script>
+  <script src="/js/login.js"></script>
+</body>
+</html>

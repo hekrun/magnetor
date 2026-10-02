@@ -1,4 +1,4 @@
-module cloud-torrent-downloader
+module github.com/hekrun/magnetor
 
 go 1.24
 
