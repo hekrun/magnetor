@@ -271,4 +271,4 @@ This beta adds a persistent, size-aware download scheduler. It waits for torrent
 
 The settings page now includes live process telemetry and structural workspace layouts (Orbit, Atlas, and Dock). Dark/light appearance preferences are retained across pages. The dashboard also has updated magnet and provider controls, including accessible custom menus that follow the selected theme.
 
-The beta version is `v1.1.2-beta.1`. The published Docker image for this version is `ghcr.io/hekrun/magnetor:1.1.2-beta.1` after the tag workflow completes.
+The beta version is `v1.1.2-beta.1`. Pull its published image with `docker pull ghcr.io/hekrun/magnetor:v1.1.2-beta.1`.
