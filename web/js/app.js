@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { torrents: [], filter: 'all' };
+const state = { torrents: [], filter: 'all', downloadLimit: 3 };
 
 function formatBytes(value) {
   if (!value) return '0 B';
@@ -28,25 +28,62 @@ function renderTorrentFiles(torrent) {
 
 function loadFooterStorage() {
   fetch('/api/storage').then((response) => response.json()).then((storage) => {
-    $('#footer-disk').textContent = storage.free ? `${formatBytes(storage.free)} free` : 'Storage unavailable';
-  }).catch(() => { $('#footer-disk').textContent = 'Storage unavailable'; });
+    const label = storage.free ? `${formatBytes(storage.free)} free` : 'Storage unavailable';
+    $('#footer-disk').textContent = label;
+    $('#hero-storage').textContent = label;
+  }).catch(() => { $('#footer-disk').textContent = 'Storage unavailable'; $('#hero-storage').textContent = 'Storage unavailable'; });
+}
+
+async function loadFooterProcessUsage() {
+  try {
+    const response = await fetch('/api/process');
+    if (!response.ok) throw new Error('Process usage unavailable');
+    const usage = await response.json();
+    const cpu = `${Number(usage.cpuPercent || 0).toFixed(1)}%`;
+    const memory = formatBytes(usage.memoryBytes);
+    const network = usage.networkAvailable
+      ? `↓${formatBytes(usage.receiveRate)}/s ↑${formatBytes(usage.transmitRate)}/s`
+      : 'network unavailable';
+    $('#footer-process-usage').textContent = `CPU ${cpu} / RAM ${memory} / NET ${network}`;
+  } catch (_) {
+    $('#footer-process-usage').textContent = 'Process usage unavailable';
+  }
 }
 
 function renderTorrents() {
   const list = $('#torrent-list');
   const openFileLists = new Set([...list.querySelectorAll('.file-details[open]')].map((details) => details.dataset.hash));
-  const visible = state.torrents.filter((torrent) => state.filter === 'all' || (state.filter === 'complete' ? torrent.progress >= 100 : torrent.progress < 100));
+  const queued = state.torrents.filter((torrent) => ['Queued', 'Fetching metadata'].includes(torrent.status));
+  const downloading = state.torrents.filter((torrent) => torrent.status === 'Downloading');
+  const complete = state.torrents.filter((torrent) => torrent.progress >= 100);
+  const visible = state.filter === 'queued' ? queued
+    : state.filter === 'downloading' ? downloading
+      : state.filter === 'complete' ? complete : state.torrents;
   $('#library-count').textContent = state.torrents.length;
+  $('#active-count-tab').textContent = downloading.length;
+  $('#queue-count').textContent = queued.length;
+  $('#complete-count').textContent = complete.length;
+  const limitLabel = state.downloadLimit === 0 ? '∞' : state.downloadLimit;
+  $('#active-summary').innerHTML = `${downloading.length} <small>/ ${limitLabel}</small>`;
+  $('#active-meter').style.width = state.downloadLimit === 0 ? (downloading.length ? '100%' : '0%') : `${Math.min(100, downloading.length / state.downloadLimit * 100)}%`;
+  $('#queue-summary').textContent = queued.length ? `${queued.length} waiting in queue` : 'Queue clear';
   if (!visible.length) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">+</div><h3>${state.torrents.length ? 'Nothing in this view' : 'Your shelf is clear'}</h3><p>${state.torrents.length ? 'Try another library view.' : 'Add a magnet link above and your next download will appear here.'}</p></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">＋</div><h3>${state.torrents.length ? 'Nothing in this view' : 'No transfers yet'}</h3><p>${state.torrents.length ? 'There are no transfers in this filter.' : 'Add a magnet link or torrent file to begin.'}</p></div>`;
     return;
   }
-  list.innerHTML = visible.map((torrent) => `<article class="torrent-row">
-    <div class="file-badge">${torrent.progress >= 100 ? 'OK' : 'DL'}</div>
+  list.innerHTML = visible.map((torrent) => {
+    const isQueued = ['Queued', 'Fetching metadata'].includes(torrent.status);
+    const statusClass = torrent.status.toLowerCase().replace(/\s+/g, '-');
+    const badge = torrent.progress >= 100 ? 'OK' : isQueued ? `Q${torrent.queuePosition || ''}` : 'DL';
+    const queueControls = isQueued ? `<div class="queue-order"><button class="icon-button" data-action="queue-up" data-hash="${torrent.hash}" aria-label="Move up in queue" title="Move up" ${torrent.queuePosition <= 1 ? 'disabled' : ''}>↑</button><button class="icon-button" data-action="queue-down" data-hash="${torrent.hash}" aria-label="Move down in queue" title="Move down" ${torrent.queuePosition >= queued.length ? 'disabled' : ''}>↓</button></div>` : '';
+    const taskControl = torrent.progress < 100 ? `<button class="control-button" data-action="${torrent.status === 'Paused' ? 'start' : 'stop'}" data-hash="${torrent.hash}">${torrent.status === 'Paused' ? 'Resume' : 'Pause'}</button>` : `<span class="seed-state">${torrent.status === 'Seeding' ? 'Seeding' : 'Complete'}</span>`;
+    return `<article class="torrent-row status-${statusClass}">
+    <div class="file-badge">${badge}</div>
     <div class="torrent-main"><div class="torrent-title">${escapeHTML(torrent.name)}</div><div class="torrent-meta">${formatBytes(torrent.downloaded)} of ${formatBytes(torrent.size)} <span class="meta-separator">/</span> ${torrent.peers} peers <span class="meta-separator">/</span> ↓ ${formatBytes(torrent.downloadSpeed || 0)}/s <span class="meta-separator">/</span> ↑ ${formatBytes(torrent.uploadSpeed || 0)}/s</div><div class="progress-track"><span style="width:${Math.min(torrent.progress, 100)}%"></span></div><details class="file-details" data-hash="${torrent.hash}" ${openFileLists.has(torrent.hash) ? 'open' : ''}><summary>View files (${(torrent.files || []).length})</summary><div class="file-list">${renderTorrentFiles(torrent)}</div></details></div>
-    <div class="torrent-stat"><strong>${Math.round(torrent.progress)}%</strong><small>${torrent.status}</small></div>
-    <div class="torrent-controls">${torrent.progress < 100 ? `<button class="control-button" data-action="${torrent.status === 'Paused' ? 'start' : 'stop'}" data-hash="${torrent.hash}">${torrent.status === 'Paused' ? 'Resume' : 'Pause'}</button>` : `<span class="seed-state">${torrent.status === 'Seeding' ? 'Seeding' : 'Complete'}</span>`}<button class="row-action" data-delete="${torrent.hash}" title="Remove torrent and files" aria-label="Remove torrent and files">×</button></div>
-  </article>`).join('');
+    <div class="torrent-stat"><strong>${torrent.progress > 0 ? `${Math.round(torrent.progress)}%` : isQueued ? `#${torrent.queuePosition || '—'}` : '0%'}</strong><small class="task-status ${statusClass}">${escapeHTML(torrent.status)}</small>${isQueued && torrent.queueReason ? `<small class="queue-reason">${escapeHTML(torrent.queueReason)}</small>` : ''}</div>
+    <div class="torrent-controls">${queueControls}${taskControl}<button class="row-action" data-delete="${torrent.hash}" title="Remove torrent and files" aria-label="Remove torrent and files">×</button></div>
+  </article>`;
+  }).join('');
 }
 
 function renderResults(results) {
@@ -58,6 +95,47 @@ function renderResults(results) {
 function escapeHTML(value) { return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
 function escapeAttribute(value) { return escapeHTML(value); }
 
+function setupMenuSelects() {
+  document.querySelectorAll('[data-menu-select]').forEach((menu) => {
+    const valueField = document.getElementById(menu.dataset.menuSelect);
+    const summary = menu.querySelector('summary');
+    const label = menu.querySelector('[data-menu-label]');
+    const choices = [...menu.querySelectorAll('[data-value]')];
+
+    const syncState = () => summary.setAttribute('aria-expanded', String(menu.open));
+    menu.addEventListener('toggle', syncState);
+    menu.addEventListener('click', (event) => {
+      const choice = event.target.closest('[data-value]');
+      if (!choice) return;
+      valueField.value = choice.dataset.value;
+      label.textContent = choice.querySelector('strong').textContent;
+      choices.forEach((item) => item.setAttribute('aria-pressed', String(item === choice)));
+      menu.open = false;
+      summary.focus();
+    });
+    menu.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        menu.open = false;
+        summary.focus();
+        return;
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      const currentIndex = choices.indexOf(document.activeElement);
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      const nextIndex = currentIndex < 0
+        ? (direction > 0 ? 0 : choices.length - 1)
+        : (currentIndex + direction + choices.length) % choices.length;
+      event.preventDefault();
+      choices[nextIndex].focus();
+    });
+    document.addEventListener('click', (event) => {
+      if (!menu.contains(event.target)) menu.open = false;
+    });
+    choices.forEach((choice) => choice.setAttribute('aria-pressed', String(choice.dataset.value === valueField.value)));
+    syncState();
+  });
+}
+
 async function loadTorrents() {
   const response = await fetch('/api/torrents');
   if (!response.ok) throw new Error('Could not load library');
@@ -66,12 +144,23 @@ async function loadTorrents() {
   $('#last-updated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+async function loadQueueSettings() {
+  try {
+    const response = await fetch('/api/settings');
+    if (!response.ok) return;
+    const data = await response.json();
+    const limit = Number(data.settings?.maxDownloads);
+    if (limit === 0 || (limit >= 2 && limit <= 5)) state.downloadLimit = limit;
+    renderTorrents();
+  } catch (_) {}
+}
+
 async function addMagnet(magnet) {
-  const response = await fetch('/api/torrent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ magnet }) });
+  const response = await fetch('/api/torrent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ magnet, mode: $('#add-mode').value }) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Could not add torrent');
   $('#magnet').value = '';
-  $('#add-message').textContent = 'Torrent added to your library.';
+  $('#add-message').textContent = $('#add-mode').value === 'direct' ? 'Added with direct-start priority.' : 'Torrent added to the queue.';
   await loadTorrents();
 }
 
@@ -87,6 +176,7 @@ $('#torrent-file').addEventListener('change', async (event) => {
   if (!file) return;
   const form = new FormData();
   form.append('file', file);
+  form.append('mode', $('#add-mode').value);
   $('#upload-message').textContent = 'Adding .torrent file...';
   try {
     const response = await fetch('/api/torrent-file', { method: 'POST', body: form });
@@ -158,8 +248,13 @@ $('#media-player').addEventListener('click', (event) => {
 });
 $('#search-form').addEventListener('submit', async (event) => { event.preventDefault(); const query = $('#query').value.trim(); if (!query) return; $('#search-results').innerHTML = '<p class="search-empty">Searching providers...</p>'; try { const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&provider=${$('#provider').value}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); renderResults(data); } catch (error) { $('#search-results').innerHTML = `<p class="search-empty">${escapeHTML(error.message)}</p>`; } });
 $('#search-results').addEventListener('click', async (event) => { const magnet = event.target.dataset.magnet; if (!magnet) return; event.target.textContent = 'Adding...'; try { await addMagnet(magnet); event.target.textContent = 'Added'; } catch (error) { event.target.textContent = 'Retry'; } });
+setupMenuSelects();
+loadQueueSettings();
 loadTorrents().catch(() => { $('#last-updated').textContent = 'Engine unavailable'; });
 loadFooterStorage();
+loadFooterProcessUsage();
 resetMediaPlayer();
 window.addEventListener('pageshow', resetMediaPlayer);
 setInterval(() => loadTorrents().catch(() => {}), 4000);
+setInterval(loadFooterStorage, 15000);
+setInterval(loadFooterProcessUsage, 4000);

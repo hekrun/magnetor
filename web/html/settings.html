@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f6fb">
+  <meta name="theme-color" content="#080e13">
   <title>Settings | Magnetor</title>
   <meta name="description" content="Configure download storage and sharing options in Magnetor, your self-hosted torrent dashboard.">
   <meta property="og:type" content="website">
@@ -11,13 +11,14 @@
   <meta property="og:title" content="Settings | Magnetor">
   <meta property="og:description" content="Configure download storage and sharing options in your Magnetor torrent dashboard.">
   <meta name="twitter:card" content="summary">
-  <script>(function(){var s=localStorage.getItem('ctd-theme');var t=(s==='dark'||s==='light')?s:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script>(function(){var r=document.documentElement;var s=localStorage.getItem('ctd-theme');var t=(s==='light'||s==='dark')?s:'dark';var l=localStorage.getItem('magnetor-layout');if(['orbit','atlas','dock'].indexOf(l)<0)l='orbit';r.setAttribute('data-theme',t);r.setAttribute('data-layout',l);})();</script>
   <link rel="stylesheet" href="/css/theme.css">
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="/css/loader.css">
 </head>
 <body>
+  <div class="sky-scene" aria-hidden="true"><div class="celestial-moon"><i class="moon-crater moon-crater-one"></i><i class="moon-crater moon-crater-two"></i></div><div class="celestial-sun"></div><span class="space-satellite"><i></i><b></b></span><span class="space-shuttle"></span></div>
   <div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-label="Loading Magnetor">
     <div class="loader-emblem"><span class="loader-ring"></span><span class="loader-mark">M</span></div>
     <p class="loader-text">Warming up your downloads…</p>
@@ -33,10 +34,17 @@
       <h1>Shape your<br><em>download space.</em></h1>
       <p class="lede">Choose where files live and decide whether completed torrents can share back with their peers.</p>
     </section>
+    <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+      <button class="settings-tab active" id="downloads-tab" type="button" role="tab" aria-selected="true" aria-controls="downloads-panel" data-settings-tab="downloads">Downloads</button>
+      <button class="settings-tab" id="process-tab" type="button" role="tab" aria-selected="false" aria-controls="process-panel" data-settings-tab="process">Process</button>
+      <button class="settings-tab" id="appearance-tab" type="button" role="tab" aria-selected="false" aria-controls="appearance-panel" data-settings-tab="appearance">Appearance</button>
+    </div>
+    <div id="downloads-panel" class="settings-tab-panel" role="tabpanel" aria-labelledby="downloads-tab">
     <section class="settings-card">
       <div class="section-heading"><div><p class="eyebrow">STORAGE</p><h2>Download location</h2></div><span class="provider-note">Local server path</span></div>
       <form id="settings-form">
         <label class="settings-field">Download path<input id="download-path" type="text" placeholder="/path/to/downloads" required><small>Absolute or workspace-relative path on the server.</small></label>
+        <label class="settings-field profile-spaced">Parallel downloads<select id="download-limit"><option value="0">Unlimited (no task cap)</option><option value="2">2 tasks</option><option value="3">3 tasks</option><option value="4">4 tasks</option><option value="5">5 tasks</option></select><small>No concurrency cap; items still wait for metadata and enough free disk space.</small></label>
         <div class="settings-divider"></div>
         <div class="setting-option"><div><strong>Allow upload to peers</strong><p>Let other peers receive pieces from this engine.</p></div><label class="toggle"><input id="upload-enabled" type="checkbox"><span></span></label></div>
         <div class="setting-option"><div><strong>Seed completed torrents</strong><p>Keep completed downloads available for sharing.</p></div><label class="toggle"><input id="seeding-enabled" type="checkbox"><span></span></label></div>
@@ -49,7 +57,27 @@
         <div class="disk-meter"><span id="disk-bar"></span></div>
         <div class="disk-stats"><div><small>Used</small><strong id="disk-used">--</strong></div><div><small>Free</small><strong id="disk-free">--</strong></div><div><small>Total</small><strong id="disk-total">--</strong></div></div>
       </section>
-    <footer><span>Magnetor / engine settings</span><span>Changes apply after restart.</span></footer>
+    </div>
+    <section id="process-panel" class="process-panel" role="tabpanel" aria-labelledby="process-tab" hidden>
+      <div class="section-heading"><div><p class="eyebrow">LIVE TELEMETRY</p><h2>Process usage</h2></div><span class="provider-note" id="process-updated">Waiting for sample</span></div>
+      <div class="process-grid">
+        <div class="process-metric"><small>CPU / Magnetor</small><strong id="process-cpu">--</strong></div>
+        <div class="process-metric"><small>RAM / Magnetor</small><strong id="process-memory">--</strong></div>
+        <div class="process-metric"><small>Network received / host</small><strong id="process-rx">--</strong></div>
+        <div class="process-metric"><small>Network sent / host</small><strong id="process-tx">--</strong></div>
+      </div>
+      <p class="process-note">CPU and RAM are for this Magnetor process. Network rates aggregate the server's interfaces.</p>
+    </section>
+    <section id="appearance-panel" class="appearance-panel" role="tabpanel" aria-labelledby="appearance-tab" hidden>
+      <div class="section-heading"><div><p class="eyebrow">PERSONALIZE</p><h2>Choose a layout</h2></div><span class="provider-note">Rearranges the workspace</span></div>
+      <div class="layout-options" role="group" aria-label="Page layout">
+        <button class="layout-choice" type="button" data-site-layout="orbit" aria-pressed="false"><span class="layout-preview preview-orbit"><i></i><b></b><em></em></span><span class="layout-choice-copy"><strong>Orbit</strong><small>Original stacked workspace</small></span></button>
+        <button class="layout-choice" type="button" data-site-layout="atlas" aria-pressed="false"><span class="layout-preview preview-atlas"><i></i><b></b><em></em></span><span class="layout-choice-copy"><strong>Atlas</strong><small>Side-by-side library and search</small></span></button>
+        <button class="layout-choice" type="button" data-site-layout="dock" aria-pressed="false"><span class="layout-preview preview-dock"><i></i><b></b><em></em></span><span class="layout-choice-copy"><strong>Dock</strong><small>Mission rail and focused workspace</small></span></button>
+      </div>
+      <p class="process-note">Your layout is remembered across pages. The header control independently switches between dark and light mode.</p>
+    </section>
+    <footer><span>Magnetor / engine settings</span><span>Storage and sharing changes may require a restart.</span></footer>
   </main>
   <script src="/js/theme.js"></script>
   <script src="/js/auth.js"></script>

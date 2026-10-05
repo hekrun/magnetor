@@ -1,37 +1,49 @@
-/* Theme engine: applies the saved/preferred theme and wires up any
-   [data-theme-toggle] buttons. The attribute itself is already set by the
-   inline bootstrap snippet in <head> (before first paint) to avoid flashes;
-   this file only keeps it in sync with user interaction and other tabs. */
 (function () {
-  var STORAGE_KEY = 'ctd-theme';
+  var MODE_KEY = 'ctd-theme';
+  var LAYOUT_KEY = 'magnetor-layout';
+  var LAYOUTS = ['orbit', 'atlas', 'dock'];
   var root = document.documentElement;
 
-  function currentTheme() {
-    return root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  function validMode(value) {
+    return value === 'light' || value === 'dark' ? value : 'dark';
   }
 
-  function applyTheme(theme) {
-    root.setAttribute('data-theme', theme);
+  function validLayout(value) {
+    return LAYOUTS.indexOf(value) >= 0 ? value : 'orbit';
+  }
+
+  function applyMode(mode, persist) {
+    mode = validMode(mode);
+    root.setAttribute('data-theme', mode);
+    if (persist) localStorage.setItem(MODE_KEY, mode);
     document.querySelectorAll('[data-theme-toggle]').forEach(function (button) {
-      button.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
-      button.setAttribute('title', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      button.setAttribute('aria-pressed', mode === 'dark' ? 'true' : 'false');
+      button.setAttribute('title', mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
     });
+    var themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = getComputedStyle(root).getPropertyValue('--bg').trim();
   }
 
   function toggleTheme() {
-    var next = currentTheme() === 'dark' ? 'light' : 'dark';
-    localStorage.setItem(STORAGE_KEY, next);
-    applyTheme(next);
+    applyMode(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark', true);
+  }
+
+  function applyLayout(layout, persist) {
+    layout = validLayout(layout);
+    root.setAttribute('data-layout', layout);
+    if (persist) localStorage.setItem(LAYOUT_KEY, layout);
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    applyTheme(currentTheme());
+    applyMode(root.getAttribute('data-theme'), false);
+    applyLayout(root.getAttribute('data-layout'), false);
     document.querySelectorAll('[data-theme-toggle]').forEach(function (button) {
       button.addEventListener('click', toggleTheme);
     });
   });
 
   window.addEventListener('storage', function (event) {
-    if (event.key === STORAGE_KEY && event.newValue) applyTheme(event.newValue);
+    if (event.key === MODE_KEY && event.newValue) applyMode(event.newValue, false);
+    if (event.key === LAYOUT_KEY && event.newValue) applyLayout(event.newValue, false);
   });
 })();

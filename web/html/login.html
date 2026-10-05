@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f6fb">
+  <meta name="theme-color" content="#080e13">
   <title>Sign In | Magnetor</title>
   <meta name="description" content="Sign in to Magnetor, your self-hosted torrent dashboard for managing magnet links, torrent transfers, and downloads.">
   <meta property="og:type" content="website">
@@ -11,13 +11,14 @@
   <meta property="og:title" content="Sign In | Magnetor">
   <meta property="og:description" content="Your self-hosted torrent dashboard for managing magnet links, transfers, and downloads.">
   <meta name="twitter:card" content="summary">
-  <script>(function(){var s=localStorage.getItem('ctd-theme');var t=(s==='dark'||s==='light')?s:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script>(function(){var r=document.documentElement;var s=localStorage.getItem('ctd-theme');var t=(s==='light'||s==='dark')?s:'dark';var l=localStorage.getItem('magnetor-layout');if(['orbit','atlas','dock'].indexOf(l)<0)l='orbit';r.setAttribute('data-theme',t);r.setAttribute('data-layout',l);})();</script>
   <link rel="stylesheet" href="/css/theme.css">
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="/css/loader.css">
 </head>
 <body>
+  <div class="sky-scene" aria-hidden="true"><div class="celestial-moon"><i class="moon-crater moon-crater-one"></i><i class="moon-crater moon-crater-two"></i></div><div class="celestial-sun"></div><span class="space-satellite"><i></i><b></b></span><span class="space-shuttle"></span></div>
   <div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-label="Loading Magnetor">
     <div class="loader-emblem"><span class="loader-ring"></span><span class="loader-mark">M</span></div>
     <p class="loader-text">Warming up your downloads…</p>

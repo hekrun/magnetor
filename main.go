@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -26,20 +27,26 @@ import (
 )
 
 type app struct {
-	client  *torrent.Client
-	auth    *authStore
-	root    string
-	config  settings
-	mu      sync.RWMutex
-	paused  map[string]bool
-	samples map[string]speedSample
-	records map[string]torrentRecord
+	client          *torrent.Client
+	auth            *authStore
+	root            string
+	config          settings
+	mu              sync.RWMutex
+	schedulerMu     sync.Mutex
+	processUsageMu  sync.Mutex
+	processSample   processUsageSample
+	paused          map[string]bool
+	activeDownloads map[string]bool
+	queueReasons    map[string]string
+	samples         map[string]speedSample
+	records         map[string]torrentRecord
 }
 
 type settings struct {
 	DownloadPath string `json:"downloadPath"`
 	Seeding      bool   `json:"seeding"`
 	Upload       bool   `json:"upload"`
+	MaxDownloads int    `json:"maxDownloads"`
 }
 
 type speedSample struct {
@@ -48,11 +55,29 @@ type speedSample struct {
 	uploaded   int64
 }
 
+type processUsageSample struct {
+	at       time.Time
+	cpu      time.Duration
+	receive  uint64
+	transmit uint64
+}
+
 type torrentRecord struct {
-	Hash     string `json:"hash"`
-	Magnet   string `json:"magnet,omitempty"`
-	MetaFile string `json:"metaFile,omitempty"`
-	Paused   bool   `json:"paused,omitempty"`
+	Hash             string `json:"hash"`
+	Magnet           string `json:"magnet,omitempty"`
+	MetaFile         string `json:"metaFile,omitempty"`
+	Paused           bool   `json:"paused,omitempty"`
+	AddedAt          int64  `json:"addedAt,omitempty"`
+	StartImmediately bool   `json:"startImmediately,omitempty"`
+}
+
+type processUsageView struct {
+	CPUPercent       float64 `json:"cpuPercent"`
+	MemoryBytes      uint64  `json:"memoryBytes"`
+	ReceiveRate      uint64  `json:"receiveRate"`
+	TransmitRate     uint64  `json:"transmitRate"`
+	NetworkAvailable bool    `json:"networkAvailable"`
+	UpdatedAt        string  `json:"updatedAt"`
 }
 
 type torrentView struct {
@@ -68,6 +93,9 @@ type torrentView struct {
 	Files         []fileView `json:"files"`
 	DownloadSpeed int64      `json:"downloadSpeed"`
 	UploadSpeed   int64      `json:"uploadSpeed"`
+	QueuePosition int        `json:"queuePosition,omitempty"`
+	QueueReason   string     `json:"queueReason,omitempty"`
+	DownloadLimit int        `json:"downloadLimit"`
 }
 
 type fileView struct {
@@ -75,6 +103,23 @@ type fileView struct {
 	Size       int64  `json:"size"`
 	Downloaded int64  `json:"downloaded"`
 	Complete   bool   `json:"complete"`
+}
+
+const minimumFreeSpaceReserve uint64 = 64 << 20
+
+func hasStorageCapacity(freeSpace, reservedSpace uint64, torrentSize int64) bool {
+	if torrentSize < 0 {
+		return false
+	}
+	required := uint64(torrentSize)
+	if required > freeSpace || reservedSpace > freeSpace-required {
+		return false
+	}
+	return freeSpace-required-reservedSpace >= minimumFreeSpaceReserve
+}
+
+func validDownloadLimit(limit int) bool {
+	return limit == 0 || (limit >= 2 && limit <= 5)
 }
 
 type searchResult struct {
@@ -120,6 +165,13 @@ func main() {
 	}
 	moveLegacyEngineFiles(root, engineDir)
 	cfg := torrent.NewDefaultClientConfig()
+	if listenPort := os.Getenv("TORRENT_LISTEN_PORT"); listenPort != "" {
+		port, err := strconv.Atoi(listenPort)
+		if err != nil || port < 0 || port > 65535 {
+			log.Fatal("TORRENT_LISTEN_PORT must be between 0 and 65535")
+		}
+		cfg.ListenPort = port
+	}
 	pieceCompletion, err := storage.NewDefaultPieceCompletionForDir(engineDir)
 	if err != nil {
 		log.Fatal(err)
@@ -136,8 +188,15 @@ func main() {
 	}
 	defer client.Close()
 
-	a := &app{client: client, auth: auth, root: root, config: config, paused: make(map[string]bool), samples: make(map[string]speedSample), records: loadTorrentRecords()}
+	a := &app{
+		client: client, auth: auth, root: root, config: config,
+		paused: make(map[string]bool), activeDownloads: make(map[string]bool),
+		queueReasons: make(map[string]string), samples: make(map[string]speedSample),
+		records: loadTorrentRecords(),
+	}
 	a.restoreTorrents()
+	a.scheduleDownloads()
+	go a.runScheduler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/torrents", a.handleTorrents)
 	mux.HandleFunc("/api/torrent", a.handleTorrent)
@@ -150,6 +209,7 @@ func main() {
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, map[string]bool{"ok": true}) })
 	mux.HandleFunc("/api/settings", a.handleSettings)
 	mux.HandleFunc("/api/storage", a.handleStorage)
+	mux.HandleFunc("/api/process", a.handleProcessUsage)
 	mux.HandleFunc("/api/auth/status", a.handleAuthStatus)
 	mux.HandleFunc("/api/auth/register", a.handleAuthRegister)
 	mux.HandleFunc("/api/auth/login", a.handleAuthLogin)
@@ -157,7 +217,11 @@ func main() {
 	mux.HandleFunc("/api/profile", a.handleProfile)
 	mux.HandleFunc("/api/auth/password", a.handlePasswordChange)
 	registerWebPages(mux)
-	server := &http.Server{Addr: ":8080", Handler: logging(a.requireLogin(mux)), ReadHeaderTimeout: 10 * time.Second}
+	listenAddr := os.Getenv("HTTP_ADDR")
+	if listenAddr == "" {
+		listenAddr = ":8080"
+	}
+	server := &http.Server{Addr: listenAddr, Handler: logging(a.requireLogin(mux)), ReadHeaderTimeout: 10 * time.Second}
 	log.Printf("Magnetor listening on http://localhost%s", server.Addr)
 	log.Fatal(server.ListenAndServe())
 }
@@ -201,10 +265,13 @@ func moveLegacyEngineFiles(downloadPath, enginePath string) {
 }
 
 func loadSettings() settings {
-	config := settings{DownloadPath: "./data/downloads", Seeding: false, Upload: false}
+	config := settings{DownloadPath: "./data/downloads", MaxDownloads: 3}
 	data, err := os.ReadFile(filepath.Join(stateDirectory(), "cloud-torrent.json"))
 	if err == nil {
 		_ = json.Unmarshal(data, &config)
+	}
+	if !validDownloadLimit(config.MaxDownloads) {
+		config.MaxDownloads = 3
 	}
 	return config
 }
@@ -261,10 +328,23 @@ func (a *app) restoreTorrents() {
 			continue
 		}
 		if record.Paused {
-			a.pause(t)
-		} else {
-			a.startWhenReady(t)
+			a.mu.Lock()
+			a.paused[record.Hash] = true
+			a.mu.Unlock()
+			if t.Info() != nil {
+				for _, file := range t.Files() {
+					file.SetPriority(torrent.PiecePriorityNone)
+				}
+			}
 		}
+	}
+}
+
+func (a *app) runScheduler() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		a.scheduleDownloads()
 	}
 }
 
@@ -278,11 +358,28 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	var next settings
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&next); err != nil || strings.TrimSpace(next.DownloadPath) == "" {
+	var body struct {
+		DownloadPath string `json:"downloadPath"`
+		Seeding      bool   `json:"seeding"`
+		Upload       bool   `json:"upload"`
+		MaxDownloads *int   `json:"maxDownloads"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil || strings.TrimSpace(body.DownloadPath) == "" {
 		writeError(w, http.StatusBadRequest, "download path is required")
 		return
 	}
+	a.mu.RLock()
+	previous := a.config
+	a.mu.RUnlock()
+	maxDownloads := previous.MaxDownloads
+	if body.MaxDownloads != nil {
+		maxDownloads = *body.MaxDownloads
+	}
+	if !validDownloadLimit(maxDownloads) {
+		writeError(w, http.StatusBadRequest, "parallel downloads must be 2 to 5 or unlimited")
+		return
+	}
+	next := settings{DownloadPath: body.DownloadPath, Seeding: body.Seeding, Upload: body.Upload, MaxDownloads: maxDownloads}
 	path, err := filepath.Abs(next.DownloadPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid download path")
@@ -298,7 +395,16 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not save settings")
 		return
 	}
-	writeJSON(w, map[string]any{"settings": next, "restartRequired": true})
+	a.mu.Lock()
+	a.config = next
+	a.mu.Unlock()
+	a.scheduleDownloads()
+	activePath, pathErr := filepath.Abs(a.root)
+	if pathErr != nil {
+		activePath = filepath.Clean(a.root)
+	}
+	restartRequired := next.DownloadPath != activePath || next.Upload != previous.Upload || next.Seeding != previous.Seeding
+	writeJSON(w, map[string]any{"settings": next, "restartRequired": restartRequired})
 }
 
 func (a *app) handleStorage(w http.ResponseWriter, r *http.Request) {
@@ -320,6 +426,103 @@ func storageInfo(path string) map[string]uint64 {
 	return map[string]uint64{"total": total, "used": used, "free": free}
 }
 
+func (a *app) handleProcessUsage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	now := time.Now()
+	cpu, cpuErr := readProcessCPUTime()
+	memory, _ := readProcessMemory()
+	receive, transmit, networkErr := readNetworkTotals()
+	usage := processUsageView{MemoryBytes: memory, NetworkAvailable: networkErr == nil, UpdatedAt: now.UTC().Format(time.RFC3339)}
+	a.processUsageMu.Lock()
+	previous := a.processSample
+	if cpuErr == nil && !previous.at.IsZero() {
+		elapsed := now.Sub(previous.at)
+		cpuDelta := cpu - previous.cpu
+		if elapsed > 0 && cpuDelta >= 0 {
+			usage.CPUPercent = float64(cpuDelta) / float64(elapsed) * 100
+		}
+	}
+	if networkErr == nil && !previous.at.IsZero() {
+		elapsed := now.Sub(previous.at).Seconds()
+		if elapsed > 0 && receive >= previous.receive && transmit >= previous.transmit {
+			usage.ReceiveRate = uint64(float64(receive-previous.receive) / elapsed)
+			usage.TransmitRate = uint64(float64(transmit-previous.transmit) / elapsed)
+		}
+	}
+	if cpuErr == nil {
+		a.processSample.at = now
+		a.processSample.cpu = cpu
+	}
+	if networkErr == nil {
+		a.processSample.at = now
+		a.processSample.receive = receive
+		a.processSample.transmit = transmit
+	}
+	a.processUsageMu.Unlock()
+	writeJSON(w, usage)
+}
+
+func readProcessCPUTime() (time.Duration, error) {
+	var usage syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
+		return 0, err
+	}
+	user := time.Duration(usage.Utime.Sec)*time.Second + time.Duration(usage.Utime.Usec)*time.Microsecond
+	system := time.Duration(usage.Stime.Sec)*time.Second + time.Duration(usage.Stime.Usec)*time.Microsecond
+	return user + system, nil
+}
+
+func readProcessMemory() (uint64, error) {
+	data, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "VmRSS:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			break
+		}
+		kilobytes, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		return kilobytes * 1024, nil
+	}
+	return 0, errors.New("process memory is unavailable")
+}
+
+func readNetworkTotals() (uint64, uint64, error) {
+	data, err := os.ReadFile("/proc/net/dev")
+	if err != nil {
+		return 0, 0, err
+	}
+	var received, transmitted uint64
+	for _, line := range strings.Split(string(data), "\n") {
+		_, values, found := strings.Cut(strings.TrimSpace(line), ":")
+		if !found {
+			continue
+		}
+		fields := strings.Fields(values)
+		if len(fields) < 9 {
+			continue
+		}
+		rx, rxErr := strconv.ParseUint(fields[0], 10, 64)
+		tx, txErr := strconv.ParseUint(fields[8], 10, 64)
+		if rxErr != nil || txErr != nil {
+			continue
+		}
+		received += rx
+		transmitted += tx
+	}
+	return received, transmitted, nil
+}
+
 func (a *app) handleTorrents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -338,9 +541,18 @@ func (a *app) handleTorrent(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Magnet string `json:"magnet"`
 			URL    string `json:"url"`
+			Mode   string `json:"mode"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		mode := strings.ToLower(strings.TrimSpace(body.Mode))
+		if mode == "" {
+			mode = "queue"
+		}
+		if mode != "queue" && mode != "direct" {
+			writeError(w, http.StatusBadRequest, "mode must be queue or direct")
 			return
 		}
 		var t *torrent.Torrent
@@ -356,7 +568,7 @@ func (a *app) handleTorrent(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		a.rememberTorrent(torrentRecord{Hash: t.InfoHash().HexString(), Magnet: strings.TrimSpace(body.Magnet)})
+		a.rememberTorrent(torrentRecord{Hash: t.InfoHash().HexString(), Magnet: strings.TrimSpace(body.Magnet), AddedAt: time.Now().UnixNano(), StartImmediately: mode == "direct"})
 		a.startWhenReady(t)
 		writeJSON(w, a.view(t))
 	case http.MethodDelete:
@@ -386,8 +598,18 @@ func (a *app) handleTorrent(w http.ResponseWriter, r *http.Request) {
 			a.startWhenReady(t)
 		} else if body.Action == "stop" {
 			a.pause(t)
+		} else if body.Action == "queue-up" {
+			if !a.moveQueuedTorrent(hash, -1) {
+				writeError(w, http.StatusConflict, "torrent cannot move higher in the queue")
+				return
+			}
+		} else if body.Action == "queue-down" {
+			if !a.moveQueuedTorrent(hash, 1) {
+				writeError(w, http.StatusConflict, "torrent cannot move lower in the queue")
+				return
+			}
 		} else {
-			writeError(w, http.StatusBadRequest, "action must be start or stop")
+			writeError(w, http.StatusBadRequest, "action must be start, stop, queue-up, or queue-down")
 			return
 		}
 		writeJSON(w, a.view(t))
@@ -418,6 +640,14 @@ func (a *app) handleTorrentFile(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<20)
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "torrent file is too large or invalid")
+		return
+	}
+	mode := strings.ToLower(strings.TrimSpace(r.FormValue("mode")))
+	if mode == "" {
+		mode = "queue"
+	}
+	if mode != "queue" && mode != "direct" {
+		writeError(w, http.StatusBadRequest, "mode must be queue or direct")
 		return
 	}
 	file, _, err := r.FormFile("file")
@@ -454,7 +684,7 @@ func (a *app) handleTorrentFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not save torrent metadata")
 		return
 	}
-	a.rememberTorrent(torrentRecord{Hash: hash, MetaFile: metaFile})
+	a.rememberTorrent(torrentRecord{Hash: hash, MetaFile: metaFile, AddedAt: time.Now().UnixNano(), StartImmediately: mode == "direct"})
 	a.startWhenReady(t)
 	writeJSON(w, a.view(t))
 }
@@ -622,38 +852,32 @@ func (a *app) serveTorrentFile(w http.ResponseWriter, r *http.Request, route, di
 
 func (a *app) startWhenReady(t *torrent.Torrent) {
 	a.mu.Lock()
-	delete(a.paused, t.InfoHash().HexString())
-	if record, ok := a.records[t.InfoHash().HexString()]; ok {
+	hash := t.InfoHash().HexString()
+	delete(a.paused, hash)
+	if record, ok := a.records[hash]; ok {
 		record.Paused = false
-		a.records[t.InfoHash().HexString()] = record
+		if record.AddedAt == 0 {
+			record.AddedAt = time.Now().UnixNano()
+		}
+		a.records[hash] = record
+	}
+	if t.Info() == nil {
+		a.queueReasons[hash] = "Fetching metadata"
 	}
 	a.mu.Unlock()
 	a.saveTorrentRecords()
-	if t.Info() != nil {
-		t.DownloadAll()
-		return
-	}
-	go func() {
-		select {
-		case <-t.GotInfo():
-			a.mu.RLock()
-			paused := a.paused[t.InfoHash().HexString()]
-			a.mu.RUnlock()
-			if !paused {
-				t.DownloadAll()
-			}
-		case <-time.After(10 * time.Minute):
-			log.Printf("torrent %s did not receive metadata within 10 minutes", t.InfoHash().HexString())
-		}
-	}()
+	a.scheduleDownloads()
 }
 
 func (a *app) pause(t *torrent.Torrent) {
 	a.mu.Lock()
-	a.paused[t.InfoHash().HexString()] = true
-	if record, ok := a.records[t.InfoHash().HexString()]; ok {
+	hash := t.InfoHash().HexString()
+	a.paused[hash] = true
+	delete(a.activeDownloads, hash)
+	a.queueReasons[hash] = "Paused"
+	if record, ok := a.records[hash]; ok {
 		record.Paused = true
-		a.records[t.InfoHash().HexString()] = record
+		a.records[hash] = record
 	}
 	a.mu.Unlock()
 	a.saveTorrentRecords()
@@ -662,6 +886,7 @@ func (a *app) pause(t *torrent.Torrent) {
 			file.SetPriority(torrent.PiecePriorityNone)
 		}
 	}
+	a.scheduleDownloads()
 }
 
 func (a *app) removeTorrent(t *torrent.Torrent) {
@@ -676,6 +901,8 @@ func (a *app) removeTorrent(t *torrent.Torrent) {
 	a.mu.Lock()
 	record := a.records[hash]
 	delete(a.paused, hash)
+	delete(a.activeDownloads, hash)
+	delete(a.queueReasons, hash)
 	delete(a.samples, hash)
 	delete(a.records, hash)
 	a.mu.Unlock()
@@ -684,6 +911,7 @@ func (a *app) removeTorrent(t *torrent.Torrent) {
 		_ = os.Remove(record.MetaFile)
 	}
 	removeTorrentFiles(a.root, paths)
+	a.scheduleDownloads()
 }
 
 func removeTorrentFiles(root string, relativePaths []string) {
@@ -781,30 +1009,53 @@ func (a *app) view(t *torrent.Torrent) torrentView {
 	progress := float64(0)
 	if size > 0 {
 		progress = float64(downloaded) / float64(size) * 100
+	} else if t.Info() != nil {
+		progress = 100
+	}
+	hash := t.InfoHash().HexString()
+	a.mu.RLock()
+	isPaused := a.paused[hash] || a.records[hash].Paused
+	isActive := a.activeDownloads[hash]
+	queueReason := a.queueReasons[hash]
+	limit := a.config.MaxDownloads
+	addedAt := a.records[hash].AddedAt
+	seeding := a.config.Seeding && a.config.Upload
+	a.mu.RUnlock()
+	if !validDownloadLimit(limit) {
+		limit = 3
 	}
 	status := "Fetching metadata"
-	if t.Info() != nil {
-		status = "Ready"
-		a.mu.RLock()
-		isPaused := a.paused[t.InfoHash().HexString()]
-		a.mu.RUnlock()
-		if progress >= 100 {
-			a.mu.RLock()
-			seeding := a.config.Seeding && a.config.Upload
-			a.mu.RUnlock()
-			if seeding {
-				status = "Seeding"
-			} else {
-				status = "Complete"
-			}
-		} else if isPaused {
-			status = "Paused"
-		} else if downloaded > 0 {
+	if isPaused {
+		status = "Paused"
+	} else if t.Info() != nil {
+		switch {
+		case progress >= 100 && seeding:
+			status = "Seeding"
+		case progress >= 100:
+			status = "Complete"
+		case isActive:
 			status = "Downloading"
+		default:
+			status = "Queued"
 		}
 	}
+	if queueReason == "" && status == "Fetching metadata" {
+		queueReason = "Fetching metadata"
+	}
+	if queueReason == "" && status == "Queued" {
+		queueReason = "Waiting for an active slot"
+	}
+	added := time.Now().UTC().Format(time.RFC3339)
+	if addedAt > 0 {
+		added = time.Unix(0, addedAt).UTC().Format(time.RFC3339)
+	}
+	queuePosition := 0
+	if status == "Queued" || status == "Fetching metadata" {
+		queuePosition = a.queuePosition(hash)
+	}
+	stats := t.Stats()
 	downloadSpeed, uploadSpeed := a.speeds(t)
-	return torrentView{Hash: t.InfoHash().HexString(), Name: name, Size: size, Downloaded: downloaded, Progress: progress, Peers: t.Stats().ActivePeers, Status: status, AddedAt: time.Now().Format(time.RFC3339), Files: a.files(t), DownloadSpeed: downloadSpeed, UploadSpeed: uploadSpeed}
+	return torrentView{Hash: hash, Name: name, Size: size, Downloaded: downloaded, Progress: progress, Rate: stats.BytesReadUsefulData.Int64(), Peers: stats.ActivePeers, Status: status, AddedAt: added, Files: a.files(t), DownloadSpeed: downloadSpeed, UploadSpeed: uploadSpeed, QueuePosition: queuePosition, QueueReason: queueReason, DownloadLimit: limit}
 }
 
 func (a *app) speeds(t *torrent.Torrent) (int64, int64) {

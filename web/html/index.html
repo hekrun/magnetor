@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f6fb">
+  <meta name="theme-color" content="#080d12">
   <title>Magnetor | Self-Hosted Torrent Dashboard</title>
   <meta name="description" content="Magnetor is a self-hosted torrent client and web dashboard. Add magnet links or .torrent files, monitor transfers, and manage downloads from your browser.">
   <meta property="og:type" content="website">
@@ -11,13 +11,14 @@
   <meta property="og:title" content="Magnetor | Self-Hosted Torrent Dashboard">
   <meta property="og:description" content="Add magnet links or .torrent files, monitor transfers, and manage downloads from a self-hosted web dashboard.">
   <meta name="twitter:card" content="summary">
-  <script>(function(){var s=localStorage.getItem('ctd-theme');var t=(s==='dark'||s==='light')?s:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script>(function(){var r=document.documentElement;var s=localStorage.getItem('ctd-theme');var t=(s==='light'||s==='dark')?s:'dark';var l=localStorage.getItem('magnetor-layout');if(['orbit','atlas','dock'].indexOf(l)<0)l='orbit';r.setAttribute('data-theme',t);r.setAttribute('data-layout',l);})();</script>
   <link rel="stylesheet" href="/css/theme.css">
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="/css/loader.css">
 </head>
 <body>
+  <div class="sky-scene" aria-hidden="true"><div class="celestial-moon"><i class="moon-crater moon-crater-one"></i><i class="moon-crater moon-crater-two"></i></div><div class="celestial-sun"></div><span class="space-satellite"><i></i><b></b></span><span class="space-shuttle"></span></div>
   <div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-label="Loading Magnetor">
     <div class="loader-emblem"><span class="loader-ring"></span><span class="loader-mark">M</span></div>
     <p class="loader-text">Warming up your downloads…</p>
@@ -30,30 +31,43 @@
     </header>
 
     <section class="hero">
-      <div>
-        <p class="eyebrow">PERSONAL DOWNLOAD ENGINE</p>
-        <h1>Move the internet<br><em>to your shelf.</em></h1>
-        <p class="lede">A quiet, fast home for your torrent queue. Search, add a magnet, and let the engine handle the rest.</p>
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="signal-mark"></span> MAGNETOR / MISSION CONTROL</p>
+        <h1>Your downloads,<br><em>in orbit.</em></h1>
+        <p class="lede">Track transfers, queue new magnets, and keep an eye on your storage from one quiet control room.</p>
       </div>
-      <div class="hero-orbit" aria-hidden="true"><span></span><b>LOCAL<br>FIRST</b></div>
+      <div class="hero-readout" aria-label="Download queue status">
+        <div class="readout-top"><span>ACTIVE TRANSFERS</span><span class="readout-live">LIVE</span></div>
+        <strong id="active-summary">0 <small>/ 3</small></strong>
+        <div class="readout-track"><span id="active-meter"></span></div>
+        <div class="readout-bottom"><span id="queue-summary">Queue clear</span><span id="hero-storage">Checking storage</span></div>
+      </div>
     </section>
 
     <section class="add-panel" aria-label="Add a torrent">
-      <div class="input-wrap"><span class="input-icon">+</span><input id="magnet" type="text" placeholder="Paste a magnet link to begin..." autocomplete="off"><button id="add" class="primary-button">Add torrent <span>-></span></button></div>
-      <div class="upload-row"><label class="upload-button" for="torrent-file">+ Add .torrent file<input id="torrent-file" type="file" accept=".torrent,application/x-bittorrent"></label><span id="upload-message" class="form-message"></span></div>
+      <div class="input-wrap">
+        <label class="magnet-field"><span class="input-icon" aria-hidden="true">+</span><input id="magnet" type="text" placeholder="Paste a magnet link..." autocomplete="off" aria-label="Magnet link"></label>
+        <div class="add-mode-field"><span>ADD MODE</span><details class="menu-select" data-menu-select="add-mode"><summary aria-label="Choose add mode"><span data-menu-label>Queue</span><i aria-hidden="true"></i></summary><div class="menu-options"><button type="button" data-value="queue"><strong>Queue</strong><small>Join the FIFO line</small></button><button type="button" data-value="direct"><strong>Direct priority</strong><small>Try next; limits still apply</small></button></div></details><input id="add-mode" type="hidden" value="queue"></div>
+        <button id="add" class="primary-button magnet-submit" type="button" aria-label="Add magnet" title="Add magnet"><span aria-hidden="true">↗</span></button>
+      </div>
+      <div class="upload-row"><label class="upload-button" for="torrent-file"><span aria-hidden="true">＋</span> Add torrent file<input id="torrent-file" type="file" accept=".torrent,application/x-bittorrent"></label><span class="mode-hint">Direct priority still respects disk space and download limits.</span><span id="upload-message" class="form-message"></span></div>
       <p id="add-message" class="form-message" role="status"></p>
     </section>
 
-    <nav class="tabs" aria-label="Library views"><button class="tab active" data-filter="all">Library <span id="library-count">0</span></button><button class="tab" data-filter="downloading">Downloading</button><button class="tab" data-filter="complete">Complete</button></nav>
+    <nav class="tabs" aria-label="Library views"><button class="tab active" data-filter="all">All <span id="library-count">0</span></button><button class="tab" data-filter="downloading">Downloading <span id="active-count-tab">0</span></button><button class="tab" data-filter="queued">Queued <span id="queue-count">0</span></button><button class="tab" data-filter="complete">Complete <span id="complete-count">0</span></button></nav>
 
     <section class="library-section">
-      <div class="section-heading"><div><p class="eyebrow">YOUR LIBRARY</p><h2>Active transfers</h2></div><span class="updated" id="last-updated">Waiting for activity</span></div>
+      <div class="section-heading"><div><p class="eyebrow">YOUR LIBRARY</p><h2>Transfer queue</h2></div><span class="updated" id="last-updated">Waiting for activity</span></div>
       <div id="torrent-list" class="torrent-list"><div class="empty-state"><div class="empty-icon">+</div><h3>Your shelf is clear</h3><p>Add a magnet link above and your next download will appear here.</p></div></div>
     </section>
 
     <section class="search-section">
-      <div class="section-heading"><div><p class="eyebrow">DISCOVER</p><h2>Search the open web</h2></div><span class="provider-note">Two provider index</span></div>
-      <form id="search-form" class="search-bar"><input id="query" type="search" placeholder="Try a title, artist, or keyword..."><select id="provider" aria-label="Search provider"><option value="all">All providers</option><option value="archive">Internet Archive</option><option value="librivox">LibriVox</option><option value="piratebay">Pirate Bay</option><option value="nyaa">Nyaa</option></select><button class="primary-button" type="submit">Search <span>-></span></button></form>
+      <div class="section-heading"><div><p class="eyebrow">DISCOVER</p><h2>Search the open web</h2></div><span class="provider-note">External indexes</span></div>
+      <form id="search-form" class="search-bar">
+        <label class="search-query"><span aria-hidden="true">⌕</span><input id="query" type="search" placeholder="Try a title, artist, or keyword..." aria-label="Search titles"></label>
+        <div class="provider-picker"><span>SEARCH INDEX</span><details class="menu-select" data-menu-select="provider"><summary aria-label="Choose search index"><span data-menu-label>All providers</span><i aria-hidden="true"></i></summary><div class="menu-options"><button type="button" data-value="all"><strong>All providers</strong><small>Search every enabled index</small></button><button type="button" data-value="archive"><strong>Internet Archive</strong><small>Public archive media</small></button><button type="button" data-value="librivox"><strong>LibriVox</strong><small>Public-domain audiobooks</small></button><button type="button" data-value="piratebay"><strong>Pirate Bay</strong><small>Community index</small></button><button type="button" data-value="nyaa"><strong>Nyaa</strong><small>Anime index</small></button></div></details><input id="provider" type="hidden" value="all"></div>
+        <button class="primary-button search-submit" type="submit">Search <span>↗</span></button>
+      </form>
       <div id="search-results" class="search-results"></div>
     </section>
 
@@ -72,7 +86,7 @@
       </div>
     </dialog>
 
-    <footer><span>Magnetor / local engine</span><span id="footer-disk">Storage: checking...</span><span>Download responsibly.</span></footer>
+    <footer><span>Magnetor / local engine</span><span id="footer-disk">Storage: checking...</span><span id="footer-process-usage">CPU -- / RAM -- / NET --</span><span>Download responsibly.</span></footer>
   </main>
   <script src="/js/theme.js"></script>
   <script src="/js/auth.js"></script>

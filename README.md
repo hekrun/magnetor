@@ -15,7 +15,11 @@ Magnetor is a self-hosted cloud torrent client with a Go-powered web dashboard. 
 - Optional upload and seeding controls
 - Persistent torrent library and settings across restarts
 - Search Internet Archive and LibriVox, plus external torrent indexes
+- Metadata-aware download queue with disk-space admission and configurable concurrency
+- Per-add queue/direct priority and manual queue reordering
 - Disk-space summary and configurable download directory
+- Live Magnetor CPU/RAM and host network usage
+- Dark/light themes and three workspace layouts: Orbit, Atlas, and Dock
 - `ctd` command to look up the username or reset a forgotten password
 
 Search providers are external services; they can be unavailable or change their APIs and page layouts. Search results are not a guarantee of availability or permission to download.
@@ -169,7 +173,7 @@ docker compose logs -f       # Follow logs
 docker compose down          # Stop and remove the container; ./data is kept
 ```
 
-The publish workflow builds `latest` on pushes to `main` and version tags (for example `v1.1.0`) on matching tag pushes. Pushes to `beta` do not trigger a build; to publish that branch, manually run the workflow with `beta` selected. Branch and version-tag images use their matching tags, for example `ghcr.io/hekrun/magnetor:beta`. If the package is private, run `docker login ghcr.io` first.
+The publish workflow builds `latest` on pushes to `main` and publishes version-tagged images when a matching version tag is pushed (for example `v1.1.2-beta.1`). Pushes to `beta` do not trigger an image build by themselves. If the package is private, run `docker login ghcr.io` first.
 
 ## Install on a cloud VPS
 
@@ -232,20 +236,23 @@ go run . password
 
 ## Settings
 
-Open **Settings** in the dashboard (`/settings.html`) to change the download path, peer upload, and completed-torrent seeding. Restart the server after saving engine settings.
+Open **Settings** in the dashboard (`/settings.html`) to change the download path, peer upload, completed-torrent seeding, and parallel download limit. Choose 2–5 active downloads or **Unlimited**. Unlimited removes the task-count cap; it does not bypass metadata discovery or disk-space checks. The scheduler estimates each torrent's remaining size, reserves space for active and newly admitted downloads, and keeps a 64 MiB free-space buffer. Items without metadata or enough available disk space wait in the queue. A newly added torrent can be assigned direct priority, and queued items can be moved up or down.
+
+Changing the download path, peer upload, or seeding setting may require a server restart. The dashboard also shows process CPU and RAM plus aggregate host network rates in the **Process** settings tab. The **Appearance** tab switches between Orbit (stacked), Atlas (side-by-side), and Dock (sidebar) layouts; the header control selects dark or light mode. Appearance preferences are saved in the browser.
 
 In Docker keep the download path inside `/data/downloads` so files stay in the mounted `data/` folder. Removing a torrent removes its downloaded files and prunes empty folders under the download directory.
 
 ## API
 
 - `GET /api/torrents`: list torrents and file/progress details
-- `POST /api/torrent`: add a magnet (`{"magnet":"magnet:..."}`)
-- `POST /api/torrent-file`: upload a `.torrent` file as multipart field `file`
-- `PATCH /api/torrent/{hash}`: pause or resume with `{"action":"stop"}` or `{"action":"start"}`
+- `POST /api/torrent`: add a magnet (`{"magnet":"magnet:..."}`); optionally pass `"mode":"direct"` to prioritize it (default: `"queue"`)
+- `POST /api/torrent-file`: upload a `.torrent` file as multipart field `file`; optionally include `mode=direct`
+- `PATCH /api/torrent/{hash}`: pause, resume, or reorder with `{"action":"stop"}`, `{"action":"start"}`, `{"action":"queue-up"}`, or `{"action":"queue-down"}`
 - `DELETE /api/torrent/{hash}`: remove a torrent and its downloaded files
 - `GET /api/search?q=QUERY&provider=archive`: search a provider
 - `GET /api/settings` and `PUT /api/settings`: read or save settings
 - `GET /api/storage`: report disk capacity for the active download directory
+- `GET /api/process`: process CPU/RAM and aggregate host network rates
 
 All endpoints except health, auth status, login, registration, and logout require a signed-in session.
 
@@ -257,3 +264,11 @@ go vet ./...
 for file in web/js/*.js; do node --check "$file"; done
 docker compose config
 ```
+
+## Latest changes
+
+This beta adds a persistent, size-aware download scheduler. It waits for torrent metadata, limits concurrent downloads to 2–5 or Unlimited, accounts for remaining sizes and reserved disk space, and preserves a small free-space buffer. Direct priority and queue reordering help choose what starts next without bypassing those checks.
+
+The settings page now includes live process telemetry and structural workspace layouts (Orbit, Atlas, and Dock). Dark/light appearance preferences are retained across pages. The dashboard also has updated magnet and provider controls, including accessible custom menus that follow the selected theme.
+
+The beta version is `v1.1.2-beta.1`. The published Docker image for this version is `ghcr.io/hekrun/magnetor:1.1.2-beta.1` after the tag workflow completes.
