@@ -265,10 +265,10 @@ for file in web/js/*.js; do node --check "$file"; done
 docker compose config
 ```
 
-## Latest changes
+## What's new in v1.2.1
 
-This beta adds a persistent, size-aware download scheduler. It waits for torrent metadata, limits concurrent downloads to 2–5 or Unlimited, accounts for remaining sizes and reserved disk space, and preserves a small free-space buffer. Direct priority and queue reordering help choose what starts next without bypassing those checks.
+This release adds a persistent, size-aware download scheduler. It waits for torrent metadata, limits concurrent downloads to 2–5 or Unlimited, accounts for remaining sizes and reserved disk space, and preserves a small free-space buffer. Direct priority and queue reordering help choose what starts next without bypassing those checks.
 
 The settings page now includes live process telemetry and structural workspace layouts (Orbit, Atlas, and Dock). Dark/light appearance preferences are retained across pages. The dashboard also has updated magnet and provider controls, including accessible custom menus that follow the selected theme.
 
-The beta version is `v1.1.2-beta.1`. Pull its published image with `docker pull ghcr.io/hekrun/magnetor:v1.1.2-beta.1`.
+The stable version is `v1.2.1`. Pull its published image with `docker pull ghcr.io/hekrun/magnetor:v1.2.1`.
